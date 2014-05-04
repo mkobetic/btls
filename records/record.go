@@ -3,10 +3,10 @@ package records
 type ProtocolVersion uint16
 
 const (
-	SSL30 = ProtocolVersion(0x300)
-	TLS10 = ProtocolVersion(0x301)
-	TLS11 = ProtocolVersion(0x302)
-	TLS12 = ProtocolVersion(0x303)
+	SSL30 ProtocolVersion = 0x0300
+	TLS10 ProtocolVersion = 0x0301
+	TLS11 ProtocolVersion = 0x0302
+	TLS12 ProtocolVersion = 0x0303
 )
 
 type ContentType uint8
@@ -25,8 +25,8 @@ const (
 	maxCiphertextLength = maxCompressedLength + 1024
 )
 
-type Record struct {
-	contentType ContentType
-	version     ProtocolVersion
-	length      uint16
-}
+//type Record struct {
+//	contentType ContentType
+//	version     ProtocolVersion
+//	length      uint16
+//}

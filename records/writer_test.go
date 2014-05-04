@@ -2,10 +2,8 @@ package records
 
 import (
 	"bytes"
-	"encoding/hex"
-	"testing"
-
 	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 func TestWriter_Basic(t *testing.T) {
@@ -27,13 +25,4 @@ func TestWriter_Basic(t *testing.T) {
 	err = w.Flush()
 	assert.Nil(t, err)
 	assertEqualBytes(t, b.Bytes(), h2b("1503020007facadebeefdead"))
-}
-
-func assertEqualBytes(t *testing.T, a, b []byte) {
-	assert.Equal(t, a, b, "Not Equal!\n%x\n%x", a, b)
-}
-
-func h2b(h string) []byte {
-	b, _ := hex.DecodeString(h)
-	return b
 }
