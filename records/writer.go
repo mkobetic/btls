@@ -10,7 +10,7 @@ type FlushWriter interface {
 	Flush() error
 }
 
-// flushWriter adapts plain io.Writer into a FlushWriter
+// flushWriter adapts plain io.Writer to be a FlushWriter
 type flushWriter struct {
 	io.Writer
 }
@@ -51,6 +51,9 @@ func NewWriterIO(writer io.Writer, buffer []byte) *Writer {
 	return NewWriter(&flushWriter{writer}, buffer)
 }
 
+// Write buffers b in the writer. If there is not enough room,
+// records with older content will be flushed automatically
+// into the underlying writer as necessary.
 func (w *Writer) Write(b []byte) (int, error) {
 	var err error
 	flushed := 0
@@ -70,9 +73,11 @@ func (w *Writer) Write(b []byte) (int, error) {
 	return flushed + copied, err
 }
 
+// Flush emits a record with entire buffered content into the underlying writer.
 func (w *Writer) Flush() error {
 	length := len(w.content) - len(w.free)
-	w.setLength(length)
+	w.buffer[3] = byte(length >> 8)
+	w.buffer[4] = byte(length & 0xFF)
 	if _, err := w.writer.Write(w.buffer[:length+headerSize]); err != nil {
 		return err
 	}
@@ -83,10 +88,14 @@ func (w *Writer) Flush() error {
 	return nil
 }
 
+// Version returns current protocol version.
 func (w *Writer) Version() ProtocolVersion {
-	return ProtocolVersion(w.buffer[1]<<8 + w.buffer[2])
+	return ProtocolVersion(w.buffer[1])<<8 | ProtocolVersion(w.buffer[2])
 }
 
+// SetVersion sets current protocol version.
+// If previous version is different any buffered content is flushed
+// in a record of that version.
 func (w *Writer) SetVersion(v ProtocolVersion) error {
 	if w.Version() == v {
 		return nil
@@ -101,10 +110,14 @@ func (w *Writer) SetVersion(v ProtocolVersion) error {
 	return nil
 }
 
+// ContentType returns current record content type.
 func (w *Writer) ContentType() ContentType {
 	return ContentType(w.buffer[0])
 }
 
+// SetContentType sets current record content type.
+// If previous type is different any buffered content is flushed
+// in a record of that type.
 func (w *Writer) SetContentType(t ContentType) error {
 	if w.ContentType() == t {
 		return nil
@@ -120,11 +133,6 @@ func (w *Writer) SetContentType(t ContentType) error {
 
 func (w *Writer) bufferEmpty() bool {
 	return len(w.free) == len(w.content)
-}
-
-func (w *Writer) setLength(l int) {
-	w.buffer[3] = byte(l >> 8)
-	w.buffer[4] = byte(l & 0xFF)
 }
 
 func (w *Writer) maxPlaintextLength() int {
