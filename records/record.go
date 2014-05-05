@@ -3,6 +3,7 @@ package records
 type ProtocolVersion uint16
 
 const (
+	TLSXX ProtocolVersion = 0x0000 // unspecified protocol version
 	SSL30 ProtocolVersion = 0x0300
 	TLS10 ProtocolVersion = 0x0301
 	TLS11 ProtocolVersion = 0x0302

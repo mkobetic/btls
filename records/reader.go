@@ -1,6 +1,14 @@
 package records
 
-import "io"
+import (
+	"errors"
+	"io"
+)
+
+var (
+	UnexpectedRecordContentType = errors.New("Received a record with unexpected content type.")
+	WrongRecordVersion          = errors.New("Received a record with wrong protocol version.")
+)
 
 // readCloser adapts plain io.Reader to io.ReadCloser
 type readCloser struct {
@@ -11,9 +19,11 @@ func (r *readCloser) Close() error { return nil }
 
 // Reader extracts payload from properly formed TLS records.
 type Reader struct {
-	reader io.ReadCloser // source of TLS records
-	buffer []byte        // holds the entire TLS record (including the header)
-	unread []byte        // frames the unread part of the payload
+	reader      io.ReadCloser   // source of TLS records
+	buffer      []byte          // holds the entire TLS record (including the header)
+	unread      []byte          // frames the unread part of the payload
+	Version     ProtocolVersion // expected record version
+	ContentType ContentType     // expected record content type
 }
 
 // NewReader creates a Reader that decodes content framed in TLS records.
@@ -30,7 +40,7 @@ func NewReader(reader io.ReadCloser, buffer []byte) *Reader {
 		// buffer must be large enough to fit a largest legal size records
 		return nil
 	}
-	return &Reader{reader: reader, buffer: buffer}
+	return &Reader{reader: reader, buffer: buffer, ContentType: handshake}
 }
 
 // NewReaderIO allows creating a Reader from plain io.Reader
@@ -69,8 +79,12 @@ func (r *Reader) readRecord() error {
 		return err
 	}
 	r.unread = r.buffer[headerSize : headerSize+m]
-
-	// TODO: check content type and do the right thing
+	if r.Version != TLSXX && r.recordVersion() != r.Version {
+		return WrongRecordVersion
+	}
+	if r.recordContentType() != r.ContentType {
+		return UnexpectedRecordContentType
+	}
 	return nil
 }
 
@@ -79,11 +93,11 @@ func (r *Reader) Close() error {
 }
 
 // Version returns current protocol version.
-func (r *Reader) Version() ProtocolVersion {
+func (r *Reader) recordVersion() ProtocolVersion {
 	return ProtocolVersion(r.buffer[1])<<8 | ProtocolVersion(r.buffer[2])
 }
 
 // ContentType returns current record content type.
-func (r *Reader) ContentType() ContentType {
+func (r *Reader) recordContentType() ContentType {
 	return ContentType(r.buffer[0])
 }
