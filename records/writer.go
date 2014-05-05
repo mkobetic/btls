@@ -4,31 +4,34 @@ import (
 	"io"
 )
 
-// FlushWriter supports both Write and Flush method
+// FlushWriter supports Write, Flush and Close methods.
 type FlushWriter interface {
 	Write(b []byte) (int, error)
 	Flush() error
+	Close() error
 }
 
-// flushWriter adapts plain io.Writer to be a FlushWriter
+// flushWriter adapts plain io.Writer to be a FlushWriter.
 type flushWriter struct {
 	io.Writer
 }
 
 func (w *flushWriter) Flush() error { return nil }
+func (w *flushWriter) Close() error { return nil }
 
 // Writer transforms written content into properly formed TLS records.
 // Records are flushed automatically when the content fills the configured buffer,
 // or explicitly using the Flush method.
 type Writer struct {
-	writer  FlushWriter // the destination of written TLS records
+	writer  FlushWriter // destination of written TLS records
 	buffer  []byte      // holds the entire TLS record (including the header)
 	content []byte      // frames the section of the buffer available for content
 	free    []byte      // frames the section of content that is still free
 }
 
 // NewWriter creates a Writer that frames written content using TLS record format.
-// The buffer parameter determines the maximum size of written TLS records.
+// The buffer argument enables external buffer management, to minimize large allocations.
+// It also controls the maximum size of TLS records that the writer produces.
 // If buffer is nil a new buffer is allocated with default (maximum) record size.
 func NewWriter(writer FlushWriter, buffer []byte) *Writer {
 	if buffer == nil {
@@ -86,6 +89,16 @@ func (w *Writer) Flush() error {
 	}
 	w.free = w.content
 	return nil
+}
+
+// Close flushes remaining buffered content and releases any associated resources.
+func (w *Writer) Close() error {
+	if !w.bufferEmpty() {
+		if err := w.Flush(); err != nil {
+			return err
+		}
+	}
+	return w.writer.Close()
 }
 
 // Version returns current protocol version.

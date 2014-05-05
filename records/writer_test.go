@@ -22,7 +22,7 @@ func TestWriter_Basic(t *testing.T) {
 	c, err = w.Write(h2b("dead"))
 	assert.Nil(t, err)
 	assert.Equal(t, 2, c)
-	err = w.Flush()
+	err = w.Close()
 	assert.Nil(t, err)
 	assertEqualBytes(t, b.Bytes(), h2b("1503020007facadebeefdead"))
 }
@@ -36,7 +36,7 @@ func TestWriter_AutoFlushing(t *testing.T) {
 	c, err = w.Write(h2b("beef"))
 	assert.Nil(t, err)
 	assert.Equal(t, 2, c)
-	err = w.Flush()
+	err = w.Close()
 	assert.Nil(t, err)
 	assertEqualBytes(t, b.Bytes(),
 		h2b("1603000002faca"+
@@ -54,7 +54,7 @@ func TestWriter_ChangingContentTypeFlushes(t *testing.T) {
 	c, err = w.Write(h2b("beef"))
 	assert.Nil(t, err)
 	assert.Equal(t, 2, c)
-	err = w.Flush()
+	err = w.Close()
 	assert.Nil(t, err)
 	assertEqualBytes(t, b.Bytes(),
 		h2b("1603000003facade"+
