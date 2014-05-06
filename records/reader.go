@@ -8,6 +8,7 @@ import (
 var (
 	UnexpectedRecordContentType = errors.New("Received a record with unexpected content type.")
 	WrongRecordVersion          = errors.New("Received a record with wrong protocol version.")
+	RecordTooLarge              = errors.New("Incoming record reports length exceeding maximum allowed record size.")
 )
 
 // readCloser adapts plain io.Reader to io.ReadCloser
@@ -48,12 +49,13 @@ func NewReaderIO(reader io.Reader, buffer []byte) *Reader {
 	return NewReader(&readCloser{reader}, buffer)
 }
 
-func (r *Reader) Read(p []byte) (int, error) {
-	n := copy(p, r.unread)
+// Read fills p with payload of the expected content type.
+func (r *Reader) Read(p []byte) (n int, err error) {
+	n = copy(p, r.unread)
 	r.unread = r.unread[n:]
 	p = p[n:]
 	for len(p) > 0 {
-		err := r.readRecord()
+		err = r.readRecord()
 		if err != nil {
 			return n, err
 		}
@@ -72,7 +74,7 @@ func (r *Reader) readRecord() error {
 	}
 	l := int(r.buffer[3])<<8 + int(r.buffer[4])
 	if l > maxCiphertextLength {
-		l = maxCiphertextLength
+		return RecordTooLarge
 	}
 	m, err = r.reader.Read(r.buffer[headerSize : headerSize+l])
 	if err != nil {
