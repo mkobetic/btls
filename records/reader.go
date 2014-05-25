@@ -23,6 +23,7 @@ type Reader struct {
 	reader      io.ReadCloser   // source of TLS records
 	buffer      []byte          // holds the entire TLS record (including the header)
 	unread      []byte          // frames the unread part of the payload
+	cipher      Cipher          // opens incoming sealed record
 	Version     ProtocolVersion // expected record version
 	ContentType ContentType     // expected record content type
 }
@@ -33,15 +34,15 @@ type Reader struct {
 // otherwise the Reader will not be created. If buffer is nil a new buffer is allocated.
 func NewReader(reader io.ReadCloser, buffer []byte) *Reader {
 	if buffer == nil {
-		buffer = make([]byte, maxCiphertextLength+headerSize)
-	} else if len(buffer) > maxCiphertextLength+headerSize {
+		buffer = make([]byte, MaxCiphertextLength+HeaderSize)
+	} else if len(buffer) > MaxCiphertextLength+HeaderSize {
 		// Make sure buffer does not exceed maximum record length
-		buffer = buffer[:maxCiphertextLength+headerSize]
-	} else if len(buffer) < maxCiphertextLength+headerSize {
+		buffer = buffer[:MaxCiphertextLength+HeaderSize]
+	} else if len(buffer) < MaxCiphertextLength+HeaderSize {
 		// buffer must be large enough to fit a largest legal size records
 		return nil
 	}
-	return &Reader{reader: reader, buffer: buffer, ContentType: handshake}
+	return &Reader{reader: reader, buffer: buffer, ContentType: Handshake}
 }
 
 // NewReaderIO allows creating a Reader from plain io.Reader
@@ -68,19 +69,19 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 }
 
 func (r *Reader) readRecord() error {
-	m, err := r.reader.Read(r.buffer[:headerSize])
+	m, err := r.reader.Read(r.buffer[:HeaderSize])
 	if err != nil {
 		return err
 	}
 	l := int(r.buffer[3])<<8 + int(r.buffer[4])
-	if l > maxCiphertextLength {
+	if l > MaxCiphertextLength {
 		return RecordTooLarge
 	}
-	m, err = r.reader.Read(r.buffer[headerSize : headerSize+l])
+	m, err = r.reader.Read(r.buffer[HeaderSize : HeaderSize+l])
 	if err != nil {
 		return err
 	}
-	r.unread = r.buffer[headerSize : headerSize+m]
+	r.unread = r.buffer[HeaderSize : HeaderSize+m]
 	if r.Version != TLSXX && r.recordVersion() != r.Version {
 		return WrongRecordVersion
 	}

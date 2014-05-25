@@ -11,8 +11,8 @@ func TestWriter_Basic(t *testing.T) {
 	w := NewWriterIO(b, nil)
 	w.SetVersion(TLS11)
 	assert.Equal(t, TLS11, w.Version())
-	w.SetContentType(alert)
-	assert.Equal(t, alert, w.ContentType())
+	w.SetContentType(Alert)
+	assert.Equal(t, Alert, w.ContentType())
 	c, err := w.Write(h2b("facade"))
 	assert.Nil(t, err)
 	assert.Equal(t, 3, c)
@@ -29,7 +29,7 @@ func TestWriter_Basic(t *testing.T) {
 
 func TestWriter_AutoFlushing(t *testing.T) {
 	b := bytes.NewBuffer(nil)
-	w := NewWriterIO(b, make([]byte, headerSize+2))
+	w := NewWriterIO(b, make([]byte, HeaderSize+2))
 	c, err := w.Write(h2b("facade"))
 	assert.Nil(t, err)
 	assert.Equal(t, 3, c)
@@ -50,7 +50,7 @@ func TestWriter_ChangingContentTypeFlushes(t *testing.T) {
 	c, err := w.Write(h2b("facade"))
 	assert.Nil(t, err)
 	assert.Equal(t, 3, c)
-	w.SetContentType(alert)
+	w.SetContentType(Alert)
 	c, err = w.Write(h2b("beef"))
 	assert.Nil(t, err)
 	assert.Equal(t, 2, c)

@@ -27,6 +27,7 @@ type Writer struct {
 	buffer  []byte      // holds the entire TLS record (including the header)
 	content []byte      // frames the section of the buffer available for content
 	free    []byte      // frames the section of content that is still free
+	cipher  Cipher      // seals outgoing records
 }
 
 // NewWriter creates a Writer that frames written content using TLS record format.
@@ -35,17 +36,17 @@ type Writer struct {
 // If buffer is nil a new buffer is allocated with default (maximum) record size.
 func NewWriter(writer FlushWriter, buffer []byte) *Writer {
 	if buffer == nil {
-		buffer = make([]byte, maxCiphertextLength+headerSize)
-	} else if len(buffer) > maxCiphertextLength+headerSize {
+		buffer = make([]byte, MaxCiphertextLength+HeaderSize)
+	} else if len(buffer) > MaxCiphertextLength+HeaderSize {
 		// Make sure buffer does not exceed maximum record length
-		buffer = buffer[:maxCiphertextLength+headerSize]
+		buffer = buffer[:MaxCiphertextLength+HeaderSize]
 	}
 	w := &Writer{writer: writer, buffer: buffer}
-	content := buffer[headerSize : headerSize+w.maxPlaintextLength()]
+	content := buffer[HeaderSize : HeaderSize+w.maxPlaintextLength()]
 	w.content = content
 	w.free = content
 	w.SetVersion(SSL30)
-	w.SetContentType(handshake)
+	w.SetContentType(Handshake)
 	return w
 }
 
@@ -81,7 +82,7 @@ func (w *Writer) Flush() error {
 	length := len(w.content) - len(w.free)
 	w.buffer[3] = byte(length >> 8)
 	w.buffer[4] = byte(length & 0xFF)
-	if _, err := w.writer.Write(w.buffer[:length+headerSize]); err != nil {
+	if _, err := w.writer.Write(w.buffer[:length+HeaderSize]); err != nil {
 		return err
 	}
 	if err := w.writer.Flush(); err != nil {
@@ -150,9 +151,9 @@ func (w *Writer) bufferEmpty() bool {
 
 func (w *Writer) maxPlaintextLength() int {
 	//TODO: leave room for padding and MAC (depends on current cipher)
-	max := len(w.buffer) - headerSize
-	if max < maxPlaintextLength {
+	max := len(w.buffer) - HeaderSize
+	if max < MaxPlaintextLength {
 		return max
 	}
-	return maxPlaintextLength
+	return MaxPlaintextLength
 }

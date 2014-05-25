@@ -13,17 +13,17 @@ const (
 type ContentType uint8
 
 const (
-	change_cipher_spec ContentType = 20
-	alert              ContentType = 21
-	handshake          ContentType = 22
-	application_data   ContentType = 23
+	ChangeCipherSpec ContentType = 20
+	Alert            ContentType = 21
+	Handshake        ContentType = 22
+	ApplicationData  ContentType = 23
 )
 
 const (
-	headerSize          = 5
-	maxPlaintextLength  = 1 << 14
-	maxCompressedLength = maxPlaintextLength + 1024
-	maxCiphertextLength = maxCompressedLength + 1024
+	HeaderSize          = 5
+	MaxPlaintextLength  = 1 << 14
+	MaxCompressedLength = MaxPlaintextLength + 1024
+	MaxCiphertextLength = MaxCompressedLength + 1024
 )
 
 //type Record struct {
