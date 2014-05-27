@@ -5,7 +5,7 @@ import (
 )
 
 func TestCipher_NULL_NULL(t *testing.T) {
-	suite := NewCipher(NULL_NULL, TLS10, nil, nil, nil)
+	suite := NewCipher(NULL_NULL, TLS10, nil, nil, nil, true)
 	bytes := []byte("Hello World!")
 	size, err := suite.Seal(bytes, bytes)
 	if err != nil {

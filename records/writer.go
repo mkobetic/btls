@@ -4,37 +4,26 @@ import (
 	"io"
 )
 
-// FlushWriter supports Write, Flush and Close methods.
-type FlushWriter interface {
-	Write(b []byte) (int, error)
+type flusher interface {
 	Flush() error
-	Close() error
 }
-
-// flushWriter adapts plain io.Writer to be a FlushWriter.
-type flushWriter struct {
-	io.Writer
-}
-
-func (w *flushWriter) Flush() error { return nil }
-func (w *flushWriter) Close() error { return nil }
 
 // Writer transforms written content into properly formed TLS records.
 // Records are flushed automatically when the content fills the configured buffer,
 // or explicitly using the Flush method.
 type Writer struct {
-	writer  FlushWriter // destination of written TLS records
-	buffer  []byte      // holds the entire TLS record (including the header)
-	content []byte      // frames the section of the buffer available for content
-	free    []byte      // frames the section of content that is still free
-	cipher  Cipher      // seals outgoing records
+	writer  io.Writer // destination of written TLS records
+	buffer  []byte    // holds the entire TLS record (including the header)
+	content []byte    // frames the section of the buffer available for content
+	free    []byte    // frames the section of content that is still free
+	cipher  Cipher    // seals outgoing records
 }
 
 // NewWriter creates a Writer that frames written content using TLS record format.
 // The buffer argument enables external buffer management, to minimize large allocations.
 // It also controls the maximum size of TLS records that the writer produces.
 // If buffer is nil a new buffer is allocated with default (maximum) record size.
-func NewWriter(writer FlushWriter, buffer []byte) *Writer {
+func NewWriter(writer io.Writer, buffer []byte) *Writer {
 	if buffer == nil {
 		buffer = make([]byte, MaxCiphertextLength+HeaderSize)
 	} else if len(buffer) > MaxCiphertextLength+HeaderSize {
@@ -48,11 +37,6 @@ func NewWriter(writer FlushWriter, buffer []byte) *Writer {
 	w.SetVersion(SSL30)
 	w.SetContentType(Handshake)
 	return w
-}
-
-// NewWriterIO allows creating a Writer from a plain io.Writer.
-func NewWriterIO(writer io.Writer, buffer []byte) *Writer {
-	return NewWriter(&flushWriter{writer}, buffer)
 }
 
 // Write buffers b in the writer. If there is not enough room,
@@ -85,8 +69,10 @@ func (w *Writer) Flush() error {
 	if _, err := w.writer.Write(w.buffer[:length+HeaderSize]); err != nil {
 		return err
 	}
-	if err := w.writer.Flush(); err != nil {
-		return err
+	if f, ok := w.writer.(flusher); ok {
+		if err := f.Flush(); err != nil {
+			return err
+		}
 	}
 	w.free = w.content
 	return nil
@@ -99,7 +85,10 @@ func (w *Writer) Close() error {
 			return err
 		}
 	}
-	return w.writer.Close()
+	if c, ok := w.writer.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 // Version returns current protocol version.

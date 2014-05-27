@@ -16,7 +16,7 @@ func BenchmarkWrite16K_2048(b *testing.B) { benchmarkWrite(b, 2048) }
 func BenchmarkWrite16K_4096(b *testing.B) { benchmarkWrite(b, 4096) }
 func benchmarkWrite(b *testing.B, size int) {
 	buffer := new(bytes.Buffer)
-	w := NewWriterIO(buffer, make([]byte, size))
+	w := NewWriter(buffer, make([]byte, size))
 	in := make([]byte, 16384)
 	for n := 0; n < b.N; n++ {
 		w.Write(in)
@@ -33,7 +33,7 @@ func BenchmarkRead16K_4096(b *testing.B) { benchmarkRead(b, 4096) }
 func benchmarkRead(b *testing.B, size int) {
 	buffer := new(bytes.Buffer)
 	content := make([]byte, 16384)
-	w := NewWriterIO(buffer, make([]byte, size))
+	w := NewWriter(buffer, make([]byte, size))
 	w.Write(content)
 	records := buffer.Bytes()
 	for n := 0; n < b.N; n++ {
@@ -52,8 +52,8 @@ func benchmarkRead(b *testing.B, size int) {
 //func benchmarkReadWritePipe(b *testing.B, size int) {
 //	pin, pout := io.Pipe()
 //	defer func() { pout.Close(); pin.Close() }()
-//	w := NewWriterIO(pout, make([]byte, size))
-//	r := NewReaderIO(pin, nil)
+//	w := NewWriter(pout, make([]byte, size))
+//	r := NewReader(pin, nil)
 //	in := make([]byte, 4096)
 //	out := make([]byte, 4096)
 //	for n := 0; n < b.N; n++ {
@@ -74,8 +74,8 @@ func benchmarkRead(b *testing.B, size int) {
 //		panic(err)
 //	}
 //	defer func() { pout.Close(); pin.Close() }()
-//	w := NewWriterIO(pout, make([]byte, size))
-//	r := NewReaderIO(pin, nil)
+//	w := NewWriter(pout, make([]byte, size))
+//	r := NewReader(pin, nil)
 //	in := make([]byte, 4096)
 //	out := make([]byte, 4096)
 //	for n := 0; n < b.N; n++ {

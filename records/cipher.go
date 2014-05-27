@@ -19,34 +19,35 @@ const (
 
 type CipherSpec struct {
 	kind          CipherKind
-	Cipher        okapi.CipherConstructor
+	Cipher        okapi.CipherSpec
 	CipherKeySize int
-	MAC           okapi.HashConstructor
+	MAC           okapi.HashSpec
 	MACKeySize    int
 }
 
 func NewCipher(spec CipherSpec, version ProtocolVersion, key, iv, macKey []byte, encrypt bool) Cipher {
-	cipher := spec.Cipher(key, iv, encrypt)
+	cipher := spec.Cipher.New(key, iv, encrypt)
 	if version == SSL30 {
-		mac := spec.MAC(macKey)
-		if cipher.kind == stream {
-			return SSL30StreamCipher{cipher, mac}
+		mac := NewSSL30MAC(spec.MAC, macKey)
+		if spec.kind == stream {
+			return &SSL30StreamCipher{cipher, mac}
 		} else {
-			return SSL30BlockCipher{cipher, mac}
+			return &SSL30BlockCipher{cipher, mac}
 		}
 	}
-	mac := spec.MAC(macKey)
+	mac := okapi.HMAC.New(spec.MAC, macKey)
 	switch spec.kind {
 	case stream:
-		return StreamCipher{cipher, mac}
+		return &StreamCipher{cipher, mac}
 	case block:
 		if version == TLS10 {
-			return TLS10BlockCipher{cipher, mac}
+			return &TLS10BlockCipher{cipher, mac}
 		}
-		BlockCipher{cipher, mac}
+		return &BlockCipher{cipher, mac}
 	case aead:
-		return AEADCipher{cipher, mac}
+		return &AEADCipher{cipher, mac}
 	}
+	return nil
 }
 
 var (
@@ -63,12 +64,52 @@ var (
 	AES_256_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 32, okapi.SHA256, 32}
 )
 
-// SSL30 uses custom MAC and implicit IVs
-type SSL30StreamCipher struct{}
-type SSL30BlockCipher struct{}
-
 // TLS uses HMAC and explicit IVs (except TLS10)
-type StreamCipher struct{}
-type TLS10BlockCipher struct{} // still uses implicit IVs
-type BlockCipher struct{}
-type AEADCipher struct{}
+type StreamCipher struct {
+	cipher okapi.Cipher
+	mac    okapi.Hash
+}
+
+func (c *StreamCipher) Open(payload, buffer []byte) (int, error) {
+	return 0, nil
+}
+func (c *StreamCipher) Seal(payload, buffer []byte) (int, error) {
+	return 0, nil
+}
+
+// TLS 1.0 still uses implicit IVs
+type TLS10BlockCipher struct {
+	cipher okapi.Cipher
+	mac    okapi.Hash
+}
+
+func (c *TLS10BlockCipher) Open(payload, buffer []byte) (int, error) {
+	return 0, nil
+}
+func (c *TLS10BlockCipher) Seal(payload, buffer []byte) (int, error) {
+	return 0, nil
+}
+
+type BlockCipher struct {
+	cipher okapi.Cipher
+	mac    okapi.Hash
+}
+
+func (c *BlockCipher) Open(payload, buffer []byte) (int, error) {
+	return 0, nil
+}
+func (c *BlockCipher) Seal(payload, buffer []byte) (int, error) {
+	return 0, nil
+}
+
+type AEADCipher struct {
+	cipher okapi.Cipher
+	mac    okapi.Hash
+}
+
+func (c *AEADCipher) Open(payload, buffer []byte) (int, error) {
+	return 0, nil
+}
+func (c *AEADCipher) Seal(payload, buffer []byte) (int, error) {
+	return 0, nil
+}
