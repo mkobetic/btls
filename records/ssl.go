@@ -18,6 +18,11 @@ func (c *SSL30StreamCipher) Seal(payload, buffer []byte) (int, error) {
 	return 0, nil
 }
 
+func (c *SSL30StreamCipher) Close() {
+	c.cipher.Close()
+	c.mac.Close()
+}
+
 type SSL30BlockCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash
@@ -28,6 +33,11 @@ func (c *SSL30BlockCipher) Open(payload, buffer []byte) (int, error) {
 }
 func (c *SSL30BlockCipher) Seal(payload, buffer []byte) (int, error) {
 	return 0, nil
+}
+
+func (c *SSL30BlockCipher) Close() {
+	c.cipher.Close()
+	c.mac.Close()
 }
 
 type SSL30MAC struct {

@@ -7,6 +7,7 @@ import (
 type Cipher interface {
 	Open(payload, buffer []byte) (int, error)
 	Seal(payload, buffer []byte) (int, error)
+	Close()
 }
 
 type CipherKind int
@@ -26,26 +27,34 @@ type CipherSpec struct {
 }
 
 func NewCipher(spec CipherSpec, version ProtocolVersion, key, iv, macKey []byte, encrypt bool) Cipher {
-	cipher := spec.Cipher.New(key, iv, encrypt)
+	var cipher okapi.Cipher
+	var mac okapi.Hash
+	if spec.Cipher != nil {
+		cipher = spec.Cipher.New(key, iv, encrypt)
+	}
 	if version == SSL30 {
-		mac := NewSSL30MAC(spec.MAC, macKey)
+		if spec.MAC != nil {
+			mac = NewSSL30MAC(spec.MAC, macKey)
+		}
 		if spec.kind == stream {
-			return &SSL30StreamCipher{cipher, mac}
+			return &SSL30StreamCipher{cipher: cipher, mac: mac}
 		} else {
-			return &SSL30BlockCipher{cipher, mac}
+			return &SSL30BlockCipher{cipher: cipher, mac: mac}
 		}
 	}
-	mac := okapi.HMAC.New(spec.MAC, macKey)
+	if spec.MAC != nil {
+		mac = okapi.HMAC.New(spec.MAC, macKey)
+	}
 	switch spec.kind {
 	case stream:
-		return &StreamCipher{cipher, mac}
+		return &StreamCipher{cipher: cipher, mac: mac}
 	case block:
 		if version == TLS10 {
-			return &TLS10BlockCipher{cipher, mac}
+			return &TLS10BlockCipher{cipher: cipher, mac: mac}
 		}
-		return &BlockCipher{cipher, mac}
+		return &BlockCipher{cipher: cipher, mac: mac}
 	case aead:
-		return &AEADCipher{cipher, mac}
+		return &AEADCipher{cipher: cipher, mac: mac}
 	}
 	return nil
 }
@@ -77,6 +86,15 @@ func (c *StreamCipher) Seal(payload, buffer []byte) (int, error) {
 	return 0, nil
 }
 
+func (c *StreamCipher) Close() {
+	if c.cipher != nil {
+		c.cipher.Close()
+	}
+	if c.mac != nil {
+		c.mac.Close()
+	}
+}
+
 // TLS 1.0 still uses implicit IVs
 type TLS10BlockCipher struct {
 	cipher okapi.Cipher
@@ -88,6 +106,11 @@ func (c *TLS10BlockCipher) Open(payload, buffer []byte) (int, error) {
 }
 func (c *TLS10BlockCipher) Seal(payload, buffer []byte) (int, error) {
 	return 0, nil
+}
+
+func (c *TLS10BlockCipher) Close() {
+	c.cipher.Close()
+	c.mac.Close()
 }
 
 type BlockCipher struct {
@@ -102,6 +125,11 @@ func (c *BlockCipher) Seal(payload, buffer []byte) (int, error) {
 	return 0, nil
 }
 
+func (c *BlockCipher) Close() {
+	c.cipher.Close()
+	c.mac.Close()
+}
+
 type AEADCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash
@@ -110,6 +138,12 @@ type AEADCipher struct {
 func (c *AEADCipher) Open(payload, buffer []byte) (int, error) {
 	return 0, nil
 }
+
 func (c *AEADCipher) Seal(payload, buffer []byte) (int, error) {
 	return 0, nil
+}
+
+func (c *AEADCipher) Close() {
+	c.cipher.Close()
+	c.mac.Close()
 }

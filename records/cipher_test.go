@@ -14,6 +14,8 @@ func TestCipher_NULL_NULL(t *testing.T) {
 	if size != 12 {
 		t.Fatalf("Wrong Seal output size: %d", size)
 	}
+	suite.Close()
+	suite = NewCipher(NULL_NULL, TLS10, nil, nil, nil, false)
 	size, err = suite.Open(bytes[:size], bytes)
 	if err != nil {
 		t.Fatalf("Open error: %s", err)
