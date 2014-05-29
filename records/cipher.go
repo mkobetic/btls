@@ -144,8 +144,12 @@ func (c *TLS10BlockCipher) Seal(buffer []byte, size int) (int, error) {
 }
 
 func (c *TLS10BlockCipher) Close() {
-	c.cipher.Close()
-	c.mac.Close()
+	if c.cipher != nil {
+		c.cipher.Close()
+	}
+	if c.mac != nil {
+		c.mac.Close()
+	}
 }
 
 type BlockCipher struct {
@@ -161,8 +165,12 @@ func (c *BlockCipher) Seal(buffer []byte, size int) (int, error) {
 }
 
 func (c *BlockCipher) Close() {
-	c.cipher.Close()
-	c.mac.Close()
+	if c.cipher != nil {
+		c.cipher.Close()
+	}
+	if c.mac != nil {
+		c.mac.Close()
+	}
 }
 
 type AEADCipher struct {
@@ -179,6 +187,10 @@ func (c *AEADCipher) Seal(buffer []byte, size int) (int, error) {
 }
 
 func (c *AEADCipher) Close() {
-	c.cipher.Close()
-	c.mac.Close()
+	if c.cipher != nil {
+		c.cipher.Close()
+	}
+	if c.mac != nil {
+		c.mac.Close()
+	}
 }

@@ -55,8 +55,12 @@ func (c *SSL30StreamCipher) Seal(buffer []byte, size int) (int, error) {
 }
 
 func (c *SSL30StreamCipher) Close() {
-	c.cipher.Close()
-	c.mac.Close()
+	if c.cipher != nil {
+		c.cipher.Close()
+	}
+	if c.mac != nil {
+		c.mac.Close()
+	}
 }
 
 type SSL30BlockCipher struct {
@@ -72,8 +76,12 @@ func (c *SSL30BlockCipher) Seal(buffer []byte, size int) (int, error) {
 }
 
 func (c *SSL30BlockCipher) Close() {
-	c.cipher.Close()
-	c.mac.Close()
+	if c.cipher != nil {
+		c.cipher.Close()
+	}
+	if c.mac != nil {
+		c.mac.Close()
+	}
 }
 
 type SSL30MAC struct {
