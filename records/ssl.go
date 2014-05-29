@@ -3,6 +3,7 @@ package records
 import (
 	"bytes"
 	"crypto/subtle"
+	"encoding/binary"
 	"github.com/mkobetic/okapi"
 )
 
@@ -21,6 +22,8 @@ func (c *SSL30StreamCipher) Open(buffer []byte, size int) (int, error) {
 	}
 	if c.mac != nil {
 		size -= c.mac.Size()
+		length := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
+		binary.BigEndian.PutUint16(length, uint16(size))
 		c.mac.Write(buffer[:BufferHeaderSize-4])                        // seq_num + type +
 		c.mac.Write(buffer[BufferHeaderSize-2 : BufferHeaderSize+size]) // length + fragment
 		buffer = buffer[BufferHeaderSize+size:]
@@ -33,11 +36,14 @@ func (c *SSL30StreamCipher) Open(buffer []byte, size int) (int, error) {
 	return size, nil
 }
 func (c *SSL30StreamCipher) Seal(buffer []byte, size int) (int, error) {
+	length := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
+	binary.BigEndian.PutUint16(length, uint16(size))
 	if c.mac != nil {
 		c.mac.Write(buffer[:BufferHeaderSize-4])                        // seq_num + type +
 		c.mac.Write(buffer[BufferHeaderSize-2 : BufferHeaderSize+size]) // length + fragment
 		size += copy(buffer[BufferHeaderSize+size:], c.mac.Digest())
 		c.mac.Reset()
+		binary.BigEndian.PutUint16(length, uint16(size))
 	}
 	buffer = buffer[BufferHeaderSize:]
 	if c.cipher != nil {

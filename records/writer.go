@@ -70,7 +70,6 @@ func (w *Writer) Write(b []byte) (int, error) {
 // Flush emits a record with entire buffered content into the underlying writer.
 func (w *Writer) Flush() (err error) {
 	length := len(w.content) - len(w.free)
-	binary.BigEndian.PutUint16(w.record[3:5], uint16(length))
 	binary.BigEndian.PutUint64(w.buffer[0:8], w.seqNum)
 	w.seqNum += 1
 	if w.seqNum == 0xFFFFFFFFFFFFFFFF {
@@ -79,7 +78,6 @@ func (w *Writer) Flush() (err error) {
 	if length, err = w.cipher.Seal(w.buffer, length); err != nil {
 		return err
 	}
-	binary.BigEndian.PutUint16(w.record[3:5], uint16(length))
 	if _, err = w.writer.Write(w.record[:length+HeaderSize]); err != nil {
 		return err
 	}

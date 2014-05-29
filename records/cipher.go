@@ -2,6 +2,7 @@ package records
 
 import (
 	"crypto/subtle"
+	"encoding/binary"
 	"github.com/mkobetic/okapi"
 )
 
@@ -89,6 +90,8 @@ func (c *StreamCipher) Open(buffer []byte, size int) (int, error) {
 	}
 	if c.mac != nil {
 		size -= c.mac.Size()
+		length := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
+		binary.BigEndian.PutUint16(length, uint16(size))
 		c.mac.Write(buffer[:BufferHeaderSize+size])
 		buffer = buffer[BufferHeaderSize+size:]
 		ok := subtle.ConstantTimeCompare(buffer[:c.mac.Size()], c.mac.Digest()) == 1
@@ -101,10 +104,13 @@ func (c *StreamCipher) Open(buffer []byte, size int) (int, error) {
 }
 
 func (c *StreamCipher) Seal(buffer []byte, size int) (int, error) {
+	length := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
+	binary.BigEndian.PutUint16(length, uint16(size))
 	if c.mac != nil {
 		c.mac.Write(buffer[:BufferHeaderSize+size])
 		size += copy(buffer[BufferHeaderSize+size:], c.mac.Digest())
 		c.mac.Reset()
+		binary.BigEndian.PutUint16(length, uint16(size))
 	}
 	buffer = buffer[BufferHeaderSize:]
 	if c.cipher != nil {
