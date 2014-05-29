@@ -2,20 +2,23 @@ package records
 
 import (
 	"bytes"
+	"github.com/mkobetic/okapi"
 	"testing"
 )
 
-var digestSize = map[CipherSpec]int{
-	NULL_NULL:   0,
-	NULL_MD5:    16,
-	NULL_SHA:    20,
-	NULL_SHA256: 32,
+var digestSize = map[okapi.HashSpec]int{
+	nil:          0,
+	okapi.MD5:    16,
+	okapi.SHA1:   20,
+	okapi.SHA256: 32,
 }
 
 func TestCipher_NULL_NULL(t *testing.T)   { testCipher(t, NULL_NULL, TLS10) }
 func TestCipher_NULL_MD5(t *testing.T)    { testCipher(t, NULL_MD5, TLS11) }
 func TestCipher_NULL_SHA256(t *testing.T) { testCipher(t, NULL_SHA256, TLS12) }
 func TestCipher_NULL_SHA(t *testing.T)    { testCipher(t, NULL_SHA, SSL30) }
+func TestCipher_RC4_128_SHA(t *testing.T) { testCipher(t, RC4_128_SHA, SSL30) }
+func TestCipher_RC4_128_MD5(t *testing.T) { testCipher(t, RC4_128_MD5, TLS10) }
 func testCipher(t *testing.T, cs CipherSpec, v ProtocolVersion) {
 	var key, iv, macKey []byte
 	if cs.CipherKeySize > 0 {
@@ -43,7 +46,7 @@ func testCipher(t *testing.T, cs CipherSpec, v ProtocolVersion) {
 	if err != nil {
 		t.Fatalf("Seal error: %s", err)
 	}
-	if size != len(msg)+digestSize[cs] {
+	if size != len(msg)+digestSize[cs.MAC] {
 		t.Fatalf("Wrong Seal output size: %d", size)
 	}
 	suite = NewCipher(cs, v, key, iv, macKey, false)
