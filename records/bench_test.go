@@ -38,7 +38,7 @@ func benchmarkRead(b *testing.B, size int) {
 	records := buffer.Bytes()
 	for n := 0; n < b.N; n++ {
 		buffer := bytes.NewBuffer(records)
-		r := NewReaderIO(buffer, nil)
+		r := NewReader(buffer, nil)
 		r.Read(content)
 	}
 }

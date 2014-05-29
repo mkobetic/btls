@@ -1,12 +1,13 @@
 package records
 
 import (
+	"crypto/subtle"
 	"github.com/mkobetic/okapi"
 )
 
 type Cipher interface {
-	Open(payload, buffer []byte) (int, error)
-	Seal(payload, buffer []byte) (int, error)
+	Open(buffer []byte, size int) (int, error)
+	Seal(buffer []byte, size int) (int, error)
 	Close()
 }
 
@@ -79,11 +80,39 @@ type StreamCipher struct {
 	mac    okapi.Hash
 }
 
-func (c *StreamCipher) Open(payload, buffer []byte) (int, error) {
-	return 0, nil
+func (c *StreamCipher) Open(buffer []byte, size int) (int, error) {
+	if c.cipher != nil {
+		ciphertext := buffer[BufferHeaderSize:]
+		ins, outs := c.cipher.Update(ciphertext[:size], ciphertext)
+		_assert(ins == size, "cipher input size %d, expected %d", ins, size)
+		_assert(outs == size, "cipher output size %d, expected %d", outs, size)
+	}
+	if c.mac != nil {
+		size -= c.mac.Size()
+		c.mac.Write(buffer[:BufferHeaderSize+size])
+		buffer = buffer[BufferHeaderSize+size:]
+		ok := subtle.ConstantTimeCompare(buffer[:c.mac.Size()], c.mac.Digest()) == 1
+		c.mac.Reset()
+		if !ok {
+			return size, InvalidRecordMAC
+		}
+	}
+	return size, nil
 }
-func (c *StreamCipher) Seal(payload, buffer []byte) (int, error) {
-	return 0, nil
+
+func (c *StreamCipher) Seal(buffer []byte, size int) (int, error) {
+	if c.mac != nil {
+		c.mac.Write(buffer[:BufferHeaderSize+size])
+		size += copy(buffer[BufferHeaderSize+size:], c.mac.Digest())
+		c.mac.Reset()
+	}
+	buffer = buffer[BufferHeaderSize:]
+	if c.cipher != nil {
+		ins, outs := c.cipher.Update(buffer[:size], buffer)
+		_assert(ins == size, "cipher input size %d, expected %d", ins, size)
+		_assert(outs == size, "cipher output size %d, expected %d", outs, size)
+	}
+	return size, nil
 }
 
 func (c *StreamCipher) Close() {
@@ -101,10 +130,10 @@ type TLS10BlockCipher struct {
 	mac    okapi.Hash
 }
 
-func (c *TLS10BlockCipher) Open(payload, buffer []byte) (int, error) {
+func (c *TLS10BlockCipher) Open(buffer []byte, size int) (int, error) {
 	return 0, nil
 }
-func (c *TLS10BlockCipher) Seal(payload, buffer []byte) (int, error) {
+func (c *TLS10BlockCipher) Seal(buffer []byte, size int) (int, error) {
 	return 0, nil
 }
 
@@ -118,10 +147,10 @@ type BlockCipher struct {
 	mac    okapi.Hash
 }
 
-func (c *BlockCipher) Open(payload, buffer []byte) (int, error) {
+func (c *BlockCipher) Open(buffer []byte, size int) (int, error) {
 	return 0, nil
 }
-func (c *BlockCipher) Seal(payload, buffer []byte) (int, error) {
+func (c *BlockCipher) Seal(buffer []byte, size int) (int, error) {
 	return 0, nil
 }
 
@@ -135,11 +164,11 @@ type AEADCipher struct {
 	mac    okapi.Hash
 }
 
-func (c *AEADCipher) Open(payload, buffer []byte) (int, error) {
+func (c *AEADCipher) Open(buffer []byte, size int) (int, error) {
 	return 0, nil
 }
 
-func (c *AEADCipher) Seal(payload, buffer []byte) (int, error) {
+func (c *AEADCipher) Seal(buffer []byte, size int) (int, error) {
 	return 0, nil
 }
 

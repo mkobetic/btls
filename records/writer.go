@@ -1,6 +1,7 @@
 package records
 
 import (
+	"encoding/binary"
 	"io"
 )
 
@@ -13,10 +14,12 @@ type flusher interface {
 // or explicitly using the Flush method.
 type Writer struct {
 	writer  io.Writer // destination of written TLS records
-	buffer  []byte    // holds the entire TLS record (including the header)
-	content []byte    // frames the section of the buffer available for content
+	buffer  []byte    // holds the entire TLS record with seq_num prepended
+	record  []byte    // frames the entire TLS record (including the header)
+	content []byte    // frames the section of the record available for content
 	free    []byte    // frames the section of content that is still free
 	cipher  Cipher    // seals outgoing records
+	seqNum  uint64    // current record number
 }
 
 // NewWriter creates a Writer that frames written content using TLS record format.
@@ -24,18 +27,21 @@ type Writer struct {
 // It also controls the maximum size of TLS records that the writer produces.
 // If buffer is nil a new buffer is allocated with default (maximum) record size.
 func NewWriter(writer io.Writer, buffer []byte) *Writer {
+	maxSize := MaxCiphertextLength + BufferHeaderSize
 	if buffer == nil {
-		buffer = make([]byte, MaxCiphertextLength+HeaderSize)
-	} else if len(buffer) > MaxCiphertextLength+HeaderSize {
+		buffer = make([]byte, maxSize)
+	} else if len(buffer) > maxSize {
 		// Make sure buffer does not exceed maximum record length
-		buffer = buffer[:MaxCiphertextLength+HeaderSize]
+		buffer = buffer[:maxSize]
 	}
 	w := &Writer{writer: writer, buffer: buffer}
-	content := buffer[HeaderSize : HeaderSize+w.maxPlaintextLength()]
+	w.record = buffer[BufferHeaderSize-HeaderSize:] // first 8 bytes are seq_num
+	content := w.record[HeaderSize : HeaderSize+w.maxPlaintextLength()]
 	w.content = content
 	w.free = content
 	w.SetVersion(SSL30)
 	w.SetContentType(Handshake)
+	w.SetCipher(NULL_NULL, SSL30, nil, nil, nil)
 	return w
 }
 
@@ -62,20 +68,28 @@ func (w *Writer) Write(b []byte) (int, error) {
 }
 
 // Flush emits a record with entire buffered content into the underlying writer.
-func (w *Writer) Flush() error {
+func (w *Writer) Flush() (err error) {
 	length := len(w.content) - len(w.free)
-	w.buffer[3] = byte(length >> 8)
-	w.buffer[4] = byte(length & 0xFF)
-	if _, err := w.writer.Write(w.buffer[:length+HeaderSize]); err != nil {
+	binary.BigEndian.PutUint16(w.record[3:5], uint16(length))
+	binary.BigEndian.PutUint64(w.buffer[0:8], w.seqNum)
+	w.seqNum += 1
+	if w.seqNum == 0xFFFFFFFFFFFFFFFF {
+		return RecordSequenceNumberOverflow
+	}
+	if length, err = w.cipher.Seal(w.buffer, length); err != nil {
+		return err
+	}
+	binary.BigEndian.PutUint16(w.record[3:5], uint16(length))
+	if _, err = w.writer.Write(w.record[:length+HeaderSize]); err != nil {
 		return err
 	}
 	if f, ok := w.writer.(flusher); ok {
-		if err := f.Flush(); err != nil {
+		if err = f.Flush(); err != nil {
 			return err
 		}
 	}
 	w.free = w.content
-	return nil
+	return err
 }
 
 // Close flushes remaining buffered content and releases any associated resources.
@@ -93,7 +107,7 @@ func (w *Writer) Close() error {
 
 // Version returns current protocol version.
 func (w *Writer) Version() ProtocolVersion {
-	return ProtocolVersion(w.buffer[1])<<8 | ProtocolVersion(w.buffer[2])
+	return ProtocolVersion(w.record[1])<<8 | ProtocolVersion(w.record[2])
 }
 
 // SetVersion sets current protocol version.
@@ -108,14 +122,14 @@ func (w *Writer) SetVersion(v ProtocolVersion) error {
 			return err
 		}
 	}
-	w.buffer[1] = byte(v >> 8)
-	w.buffer[2] = byte(v & 0xFF)
+	w.record[1] = byte(v >> 8)
+	w.record[2] = byte(v & 0xFF)
 	return nil
 }
 
 // ContentType returns current record content type.
 func (w *Writer) ContentType() ContentType {
-	return ContentType(w.buffer[0])
+	return ContentType(w.record[0])
 }
 
 // SetContentType sets current record content type.
@@ -130,7 +144,17 @@ func (w *Writer) SetContentType(t ContentType) error {
 			return err
 		}
 	}
-	w.buffer[0] = byte(t)
+	w.record[0] = byte(t)
+	return nil
+}
+
+func (w *Writer) SetCipher(cs CipherSpec, v ProtocolVersion, key, iv, macKey []byte) error {
+	if !w.bufferEmpty() {
+		if err := w.Flush(); err != nil {
+			return err
+		}
+	}
+	w.cipher = NewCipher(cs, v, key, iv, macKey, true)
 	return nil
 }
 
@@ -139,8 +163,8 @@ func (w *Writer) bufferEmpty() bool {
 }
 
 func (w *Writer) maxPlaintextLength() int {
-	//TODO: leave room for padding and MAC (depends on current cipher)
-	max := len(w.buffer) - HeaderSize
+	// Leave room for padding (max cipher block size) and mac (max digest size)
+	max := len(w.record) - HeaderSize - MinBufferTrailerSize
 	if max < MaxPlaintextLength {
 		return max
 	}

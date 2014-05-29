@@ -1,29 +1,17 @@
 package records
 
 import (
-	"errors"
 	"io"
 )
 
-var (
-	UnexpectedRecordContentType = errors.New("Received a record with unexpected content type.")
-	WrongRecordVersion          = errors.New("Received a record with wrong protocol version.")
-	RecordTooLarge              = errors.New("Incoming record reports length exceeding maximum allowed record size.")
-)
-
-// readCloser adapts plain io.Reader to io.ReadCloser
-type readCloser struct {
-	io.Reader
-}
-
-func (r *readCloser) Close() error { return nil }
-
 // Reader extracts payload from properly formed TLS records.
 type Reader struct {
-	reader      io.ReadCloser   // source of TLS records
-	buffer      []byte          // holds the entire TLS record (including the header)
+	reader      io.Reader       // source of TLS records
+	buffer      []byte          // holds the entire TLS record with seq_num prepended
+	record      []byte          // frames the entire TLS record (including the header)
 	unread      []byte          // frames the unread part of the payload
 	cipher      Cipher          // opens incoming sealed record
+	seqNum      uint64          // current record number
 	Version     ProtocolVersion // expected record version
 	ContentType ContentType     // expected record content type
 }
@@ -32,22 +20,20 @@ type Reader struct {
 // The buffer argument enables external buffer management to minimize large allocations.
 // It must be large enough to accommodate maximum record size (maxCiphertextLength+headerSize),
 // otherwise the Reader will not be created. If buffer is nil a new buffer is allocated.
-func NewReader(reader io.ReadCloser, buffer []byte) *Reader {
+func NewReader(reader io.Reader, buffer []byte) *Reader {
 	if buffer == nil {
 		buffer = make([]byte, MaxCiphertextLength+HeaderSize)
 	} else if len(buffer) > MaxCiphertextLength+HeaderSize {
 		// Make sure buffer does not exceed maximum record length
 		buffer = buffer[:MaxCiphertextLength+HeaderSize]
 	} else if len(buffer) < MaxCiphertextLength+HeaderSize {
-		// buffer must be large enough to fit a largest legal size records
+		// buffer must be large enough to fit a largest legal size record
 		return nil
 	}
-	return &Reader{reader: reader, buffer: buffer, ContentType: Handshake}
-}
-
-// NewReaderIO allows creating a Reader from plain io.Reader
-func NewReaderIO(reader io.Reader, buffer []byte) *Reader {
-	return NewReader(&readCloser{reader}, buffer)
+	r := &Reader{reader: reader, buffer: buffer, ContentType: Handshake}
+	r.record = buffer[BufferHeaderSize-HeaderSize:] // first 8 bytes are seq_num
+	r.SetCipher(NULL_NULL, SSL30, nil, nil, nil)
+	return r
 }
 
 // Read fills p with payload of the expected content type.
@@ -69,38 +55,53 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 }
 
 func (r *Reader) readRecord() error {
-	m, err := r.reader.Read(r.buffer[:HeaderSize])
+	m, err := r.reader.Read(r.record[:HeaderSize])
 	if err != nil {
 		return err
 	}
-	l := int(r.buffer[3])<<8 + int(r.buffer[4])
-	if l > MaxCiphertextLength {
-		return RecordTooLarge
-	}
-	m, err = r.reader.Read(r.buffer[HeaderSize : HeaderSize+l])
-	if err != nil {
-		return err
-	}
-	r.unread = r.buffer[HeaderSize : HeaderSize+m]
+	_assert(m == HeaderSize, "incomplete record header read %d", m)
 	if r.Version != TLSXX && r.recordVersion() != r.Version {
 		return WrongRecordVersion
 	}
 	if r.recordContentType() != r.ContentType {
 		return UnexpectedRecordContentType
 	}
+	length := int(r.record[3])<<8 + int(r.record[4])
+	if length > MaxCiphertextLength {
+		return RecordTooLarge
+	}
+	r.unread = r.record[HeaderSize : HeaderSize+length]
+	m, err = r.reader.Read(r.unread)
+	if err != nil {
+		return err
+	}
+	_assert(m == length, "incomplete record read %d, expected %d", m, length)
+	length, err = r.cipher.Open(r.buffer, length)
+	if err != nil {
+		return err
+	}
+	r.unread = r.unread[:length]
 	return nil
 }
 
 func (r *Reader) Close() error {
-	return r.reader.Close()
+	if c, ok := r.reader.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
+}
+
+func (r *Reader) SetCipher(cs CipherSpec, v ProtocolVersion, key, iv, macKey []byte) error {
+	r.cipher = NewCipher(cs, v, key, iv, macKey, false)
+	return nil
 }
 
 // Version returns current protocol version.
 func (r *Reader) recordVersion() ProtocolVersion {
-	return ProtocolVersion(r.buffer[1])<<8 | ProtocolVersion(r.buffer[2])
+	return ProtocolVersion(r.record[1])<<8 | ProtocolVersion(r.record[2])
 }
 
 // ContentType returns current record content type.
 func (r *Reader) recordContentType() ContentType {
-	return ContentType(r.buffer[0])
+	return ContentType(r.record[0])
 }

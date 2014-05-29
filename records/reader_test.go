@@ -9,7 +9,7 @@ import (
 
 func TestReader_Basic(t *testing.T) {
 	b := bytes.NewBuffer(h2b("1503020007facadebeefdead"))
-	r := NewReaderIO(b, nil)
+	r := NewReader(b, nil)
 	r.ContentType = Alert
 	out := make([]byte, 4)
 	n, err := r.Read(out)
@@ -33,7 +33,7 @@ func TestReader_FragmentedRead(t *testing.T) {
 		h2b("1603000003facade" +
 			"1603000002beef" +
 			"1603000002dead"))
-	r := NewReaderIO(b, nil)
+	r := NewReader(b, nil)
 	out := make([]byte, 4)
 	n, err := r.Read(out)
 	assert.Nil(t, err)

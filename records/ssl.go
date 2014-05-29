@@ -2,6 +2,7 @@ package records
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"github.com/mkobetic/okapi"
 )
 
@@ -11,11 +12,40 @@ type SSL30StreamCipher struct {
 	mac    okapi.Hash
 }
 
-func (c *SSL30StreamCipher) Open(payload, buffer []byte) (int, error) {
-	return 0, nil
+func (c *SSL30StreamCipher) Open(buffer []byte, size int) (int, error) {
+	if c.cipher != nil {
+		ciphertext := buffer[BufferHeaderSize:]
+		ins, outs := c.cipher.Update(ciphertext[:size], ciphertext)
+		_assert(ins == size, "cipher input size %d, expected %d", ins, size)
+		_assert(outs == size, "cipher output size %d, expected %d", outs, size)
+	}
+	if c.mac != nil {
+		size -= c.mac.Size()
+		c.mac.Write(buffer[:BufferHeaderSize-4])                        // seq_num + type +
+		c.mac.Write(buffer[BufferHeaderSize-2 : BufferHeaderSize+size]) // length + fragment
+		buffer = buffer[BufferHeaderSize+size:]
+		ok := subtle.ConstantTimeCompare(buffer[:c.mac.Size()], c.mac.Digest()) == 1
+		c.mac.Reset()
+		if !ok {
+			return size, InvalidRecordMAC
+		}
+	}
+	return size, nil
 }
-func (c *SSL30StreamCipher) Seal(payload, buffer []byte) (int, error) {
-	return 0, nil
+func (c *SSL30StreamCipher) Seal(buffer []byte, size int) (int, error) {
+	if c.mac != nil {
+		c.mac.Write(buffer[:BufferHeaderSize-4])                        // seq_num + type +
+		c.mac.Write(buffer[BufferHeaderSize-2 : BufferHeaderSize+size]) // length + fragment
+		size += copy(buffer[BufferHeaderSize+size:], c.mac.Digest())
+		c.mac.Reset()
+	}
+	buffer = buffer[BufferHeaderSize:]
+	if c.cipher != nil {
+		ins, outs := c.cipher.Update(buffer[:size], buffer)
+		_assert(ins == size, "cipher input size %d, expected %d", ins, size)
+		_assert(outs == size, "cipher output size %d, expected %d", outs, size)
+	}
+	return size, nil
 }
 
 func (c *SSL30StreamCipher) Close() {
@@ -28,10 +58,10 @@ type SSL30BlockCipher struct {
 	mac    okapi.Hash
 }
 
-func (c *SSL30BlockCipher) Open(payload, buffer []byte) (int, error) {
+func (c *SSL30BlockCipher) Open(buffer []byte, size int) (int, error) {
 	return 0, nil
 }
-func (c *SSL30BlockCipher) Seal(payload, buffer []byte) (int, error) {
+func (c *SSL30BlockCipher) Seal(buffer []byte, size int) (int, error) {
 	return 0, nil
 }
 
