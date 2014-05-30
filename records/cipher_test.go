@@ -49,6 +49,9 @@ func testCipher(t *testing.T, cs CipherSpec, v ProtocolVersion) {
 	if size != len(msg)+digestSize[cs.MAC] {
 		t.Fatalf("Wrong Seal output size: %d", size)
 	}
+	if cs.Cipher != nil && bytes.Equal(payload, msg) {
+		t.Fatalf("Payload not encrypted %s", payload)
+	}
 	suite = NewCipher(cs, v, key, iv, macKey, false)
 	defer suite.Close()
 	size, err = suite.Open(buffer, size)

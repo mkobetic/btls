@@ -6,12 +6,6 @@ import (
 	"github.com/mkobetic/okapi"
 )
 
-type Cipher interface {
-	Open(buffer []byte, size int) (int, error)
-	Seal(buffer []byte, size int) (int, error)
-	Close()
-}
-
 type CipherKind int
 
 const (
@@ -26,6 +20,26 @@ type CipherSpec struct {
 	CipherKeySize int
 	MAC           okapi.HashSpec
 	MACKeySize    int
+}
+
+var (
+	NULL_NULL          = CipherSpec{stream, nil, 0, nil, 0}
+	NULL_MD5           = CipherSpec{stream, nil, 0, okapi.MD5, 16}
+	NULL_SHA           = CipherSpec{stream, nil, 0, okapi.SHA1, 20}
+	NULL_SHA256        = CipherSpec{stream, nil, 0, okapi.SHA256, 32}
+	RC4_128_MD5        = CipherSpec{stream, okapi.RC4, 16, okapi.MD5, 16}
+	RC4_128_SHA        = CipherSpec{stream, okapi.RC4, 16, okapi.SHA1, 20}
+	DES_EDE_CBC_SHA    = CipherSpec{block, okapi.DES3_CBC, 24, okapi.SHA1, 20}
+	AES_128_CBC_SHA    = CipherSpec{block, okapi.AES_CBC, 16, okapi.SHA1, 20}
+	AES_128_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 16, okapi.SHA256, 32}
+	AES_256_CBC_SHA    = CipherSpec{block, okapi.AES_CBC, 32, okapi.SHA1, 20}
+	AES_256_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 32, okapi.SHA256, 32}
+)
+
+type Cipher interface {
+	Open(buffer []byte, size int) (int, error)
+	Seal(buffer []byte, size int) (int, error)
+	Close()
 }
 
 func NewCipher(spec CipherSpec, version ProtocolVersion, key, iv, macKey []byte, encrypt bool) Cipher {
@@ -61,20 +75,6 @@ func NewCipher(spec CipherSpec, version ProtocolVersion, key, iv, macKey []byte,
 	return nil
 }
 
-var (
-	NULL_NULL          = CipherSpec{stream, nil, 0, nil, 0}
-	NULL_MD5           = CipherSpec{stream, nil, 0, okapi.MD5, 16}
-	NULL_SHA           = CipherSpec{stream, nil, 0, okapi.SHA1, 20}
-	NULL_SHA256        = CipherSpec{stream, nil, 0, okapi.SHA256, 32}
-	RC4_128_MD5        = CipherSpec{stream, okapi.RC4, 16, okapi.MD5, 16}
-	RC4_128_SHA        = CipherSpec{stream, okapi.RC4, 16, okapi.SHA1, 20}
-	DES_EDE_CBC_SHA    = CipherSpec{block, okapi.DES3_CBC, 24, okapi.SHA1, 20}
-	AES_128_CBC_SHA    = CipherSpec{block, okapi.AES_CBC, 16, okapi.SHA1, 20}
-	AES_128_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 16, okapi.SHA256, 32}
-	AES_256_CBC_SHA    = CipherSpec{block, okapi.AES_CBC, 32, okapi.SHA1, 20}
-	AES_256_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 32, okapi.SHA256, 32}
-)
-
 // TLS uses HMAC and explicit IVs (except TLS10)
 type StreamCipher struct {
 	cipher okapi.Cipher
@@ -82,42 +82,13 @@ type StreamCipher struct {
 }
 
 func (c *StreamCipher) Open(buffer []byte, size int) (int, error) {
-	if c.cipher != nil {
-		ciphertext := buffer[BufferHeaderSize:]
-		ins, outs := c.cipher.Update(ciphertext[:size], ciphertext)
-		_assert(ins == size, "cipher input size %d, expected %d", ins, size)
-		_assert(outs == size, "cipher output size %d, expected %d", outs, size)
-	}
-	if c.mac != nil {
-		size -= c.mac.Size()
-		length := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
-		binary.BigEndian.PutUint16(length, uint16(size))
-		c.mac.Write(buffer[:BufferHeaderSize+size])
-		buffer = buffer[BufferHeaderSize+size:]
-		ok := subtle.ConstantTimeCompare(buffer[:c.mac.Size()], c.mac.Digest()) == 1
-		c.mac.Reset()
-		if !ok {
-			return size, InvalidRecordMAC
-		}
-	}
-	return size, nil
+	size = streamDecrypt(c.cipher, buffer, size)
+	return macVerify(c.mac, buffer, size)
 }
 
 func (c *StreamCipher) Seal(buffer []byte, size int) (int, error) {
-	length := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
-	binary.BigEndian.PutUint16(length, uint16(size))
-	if c.mac != nil {
-		c.mac.Write(buffer[:BufferHeaderSize+size])
-		size += copy(buffer[BufferHeaderSize+size:], c.mac.Digest())
-		c.mac.Reset()
-		binary.BigEndian.PutUint16(length, uint16(size))
-	}
-	buffer = buffer[BufferHeaderSize:]
-	if c.cipher != nil {
-		ins, outs := c.cipher.Update(buffer[:size], buffer)
-		_assert(ins == size, "cipher input size %d, expected %d", ins, size)
-		_assert(outs == size, "cipher output size %d, expected %d", outs, size)
-	}
+	size = macSign(c.mac, buffer, size)
+	size = streamEncrypt(c.cipher, buffer, size)
 	return size, nil
 }
 
@@ -130,7 +101,7 @@ func (c *StreamCipher) Close() {
 	}
 }
 
-// TLS 1.0 still uses implicit IVs
+// TLS 1.0 needs specialized block cipher because it still uses implicit IVs
 type TLS10BlockCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash
@@ -193,4 +164,65 @@ func (c *AEADCipher) Close() {
 	if c.mac != nil {
 		c.mac.Close()
 	}
+}
+
+func streamEncrypt(cipher okapi.Cipher, buffer []byte, size int) int {
+	if cipher == nil {
+		return size
+	}
+	// Encrypt everything after the header.
+	buffer = buffer[BufferHeaderSize:]
+	ins, outs := cipher.Update(buffer[:size], buffer)
+	_assert(ins == size, "cipher input size %d, expected %d", ins, size)
+	_assert(outs == size, "cipher output size %d, expected %d", outs, size)
+	return size
+}
+
+func streamDecrypt(cipher okapi.Cipher, buffer []byte, size int) int {
+	if cipher == nil {
+		return size
+	}
+	// Decrypt everything after the header.
+	ciphertext := buffer[BufferHeaderSize:]
+	ins, outs := cipher.Update(ciphertext[:size], ciphertext)
+	_assert(ins == size, "cipher input size %d, expected %d", ins, size)
+	_assert(outs == size, "cipher output size %d, expected %d", outs, size)
+	return size
+}
+
+func macSign(mac okapi.Hash, buffer []byte, size int) int {
+	// Update the length field in the header with the data size.
+	lengthHeader := buffer[BufferHeaderSize-HeaderSize+3:][:2]
+	binary.BigEndian.PutUint16(lengthHeader, uint16(size))
+	if mac == nil {
+		return size
+	}
+	// Hash whole buffer (including the seq_num and record header).
+	mac.Write(buffer[:BufferHeaderSize+size])
+	// Append the digest at the end.
+	size += copy(buffer[BufferHeaderSize+size:], mac.Digest())
+	mac.Reset()
+	// Update the length field in the header to include the digest
+	binary.BigEndian.PutUint16(lengthHeader, uint16(size))
+	return size
+}
+
+func macVerify(mac okapi.Hash, buffer []byte, size int) (int, error) {
+	if mac == nil {
+		return size, nil
+	}
+	size -= mac.Size()
+	// Adjust the length field in the header to exclude the record digest,
+	// so that we can feed the buffer directly into to the MAC function.
+	lengthHeader := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
+	binary.BigEndian.PutUint16(lengthHeader, uint16(size))
+	mac.Write(buffer[:BufferHeaderSize+size])
+	buffer = buffer[BufferHeaderSize+size:]
+	// Check that the computed digest matches the received digest.
+	ok := subtle.ConstantTimeCompare(buffer[:mac.Size()], mac.Digest()) == 1
+	mac.Reset()
+	if !ok {
+		return size, InvalidRecordMAC
+	}
+	return size, nil
 }
