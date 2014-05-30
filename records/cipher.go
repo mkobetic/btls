@@ -15,25 +15,26 @@ const (
 )
 
 type CipherSpec struct {
-	kind          CipherKind
-	Cipher        okapi.CipherSpec
-	CipherKeySize int
-	MAC           okapi.HashSpec
-	MACKeySize    int
+	kind            CipherKind
+	Cipher          okapi.CipherSpec
+	CipherKeySize   int
+	CipherBlockSize int
+	MAC             okapi.HashSpec
+	MACKeySize      int
 }
 
 var (
-	NULL_NULL          = CipherSpec{stream, nil, 0, nil, 0}
-	NULL_MD5           = CipherSpec{stream, nil, 0, okapi.MD5, 16}
-	NULL_SHA           = CipherSpec{stream, nil, 0, okapi.SHA1, 20}
-	NULL_SHA256        = CipherSpec{stream, nil, 0, okapi.SHA256, 32}
-	RC4_128_MD5        = CipherSpec{stream, okapi.RC4, 16, okapi.MD5, 16}
-	RC4_128_SHA        = CipherSpec{stream, okapi.RC4, 16, okapi.SHA1, 20}
-	DES_EDE_CBC_SHA    = CipherSpec{block, okapi.DES3_CBC, 24, okapi.SHA1, 20}
-	AES_128_CBC_SHA    = CipherSpec{block, okapi.AES_CBC, 16, okapi.SHA1, 20}
-	AES_128_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 16, okapi.SHA256, 32}
-	AES_256_CBC_SHA    = CipherSpec{block, okapi.AES_CBC, 32, okapi.SHA1, 20}
-	AES_256_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 32, okapi.SHA256, 32}
+	NULL_NULL          = CipherSpec{stream, nil, 0, 0, nil, 0}
+	NULL_MD5           = CipherSpec{stream, nil, 0, 0, okapi.MD5, 16}
+	NULL_SHA           = CipherSpec{stream, nil, 0, 0, okapi.SHA1, 20}
+	NULL_SHA256        = CipherSpec{stream, nil, 0, 0, okapi.SHA256, 32}
+	RC4_128_MD5        = CipherSpec{stream, okapi.RC4, 16, 1, okapi.MD5, 16}
+	RC4_128_SHA        = CipherSpec{stream, okapi.RC4, 16, 1, okapi.SHA1, 20}
+	DES_EDE_CBC_SHA    = CipherSpec{block, okapi.DES3_CBC, 24, 8, okapi.SHA1, 20}
+	AES_128_CBC_SHA    = CipherSpec{block, okapi.AES_CBC, 16, 16, okapi.SHA1, 20}
+	AES_128_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 16, 16, okapi.SHA256, 32}
+	AES_256_CBC_SHA    = CipherSpec{block, okapi.AES_CBC, 32, 16, okapi.SHA1, 20}
+	AES_256_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 32, 16, okapi.SHA256, 32}
 )
 
 type Cipher interface {
@@ -82,13 +83,13 @@ type StreamCipher struct {
 }
 
 func (c *StreamCipher) Open(buffer []byte, size int) (int, error) {
-	size = streamDecrypt(c.cipher, buffer, size)
-	return macVerify(c.mac, buffer, size)
+	decrypt(c.cipher, buffer, size)
+	return verify(c.mac, buffer, size)
 }
 
 func (c *StreamCipher) Seal(buffer []byte, size int) (int, error) {
-	size = macSign(c.mac, buffer, size)
-	size = streamEncrypt(c.cipher, buffer, size)
+	size = sign(c.mac, buffer, size)
+	encrypt(c.cipher, buffer, size)
 	return size, nil
 }
 
@@ -107,11 +108,17 @@ type TLS10BlockCipher struct {
 	mac    okapi.Hash
 }
 
-func (c *TLS10BlockCipher) Open(buffer []byte, size int) (int, error) {
-	return 0, nil
-}
 func (c *TLS10BlockCipher) Seal(buffer []byte, size int) (int, error) {
-	return 0, nil
+	size = sign(c.mac, buffer, size)
+	size = addPadding(c.cipher, buffer, size)
+	encrypt(c.cipher, buffer, size)
+	return size, nil
+}
+
+func (c *TLS10BlockCipher) Open(buffer []byte, size int) (int, error) {
+	decrypt(c.cipher, buffer, size)
+	size = removePadding(c.cipher, buffer, size)
+	return verify(c.mac, buffer, size)
 }
 
 func (c *TLS10BlockCipher) Close() {
@@ -166,31 +173,39 @@ func (c *AEADCipher) Close() {
 	}
 }
 
-func streamEncrypt(cipher okapi.Cipher, buffer []byte, size int) int {
+func encrypt(cipher okapi.Cipher, buffer []byte, size int) {
 	if cipher == nil {
-		return size
+		return
 	}
 	// Encrypt everything after the header.
 	buffer = buffer[BufferHeaderSize:]
 	ins, outs := cipher.Update(buffer[:size], buffer)
 	_assert(ins == size, "cipher input size %d, expected %d", ins, size)
 	_assert(outs == size, "cipher output size %d, expected %d", outs, size)
-	return size
 }
 
-func streamDecrypt(cipher okapi.Cipher, buffer []byte, size int) int {
+func decrypt(cipher okapi.Cipher, buffer []byte, size int) {
 	if cipher == nil {
-		return size
+		return
 	}
 	// Decrypt everything after the header.
 	ciphertext := buffer[BufferHeaderSize:]
 	ins, outs := cipher.Update(ciphertext[:size], ciphertext)
 	_assert(ins == size, "cipher input size %d, expected %d", ins, size)
 	_assert(outs == size, "cipher output size %d, expected %d", outs, size)
-	return size
 }
 
-func macSign(mac okapi.Hash, buffer []byte, size int) int {
+func addPadding(cipher okapi.Cipher, buffer []byte, size int) int {
+	// TODO: Add randomized padding length
+	return addPaddingSSL30(cipher, buffer, size)
+}
+
+func removePadding(cipher okapi.Cipher, buffer []byte, size int) int {
+	var pad = int(buffer[BufferHeaderSize+size-1])
+	return size - 1 - pad
+}
+
+func sign(mac okapi.Hash, buffer []byte, size int) int {
 	// Update the length field in the header with the data size.
 	lengthHeader := buffer[BufferHeaderSize-HeaderSize+3:][:2]
 	binary.BigEndian.PutUint16(lengthHeader, uint16(size))
@@ -207,7 +222,7 @@ func macSign(mac okapi.Hash, buffer []byte, size int) int {
 	return size
 }
 
-func macVerify(mac okapi.Hash, buffer []byte, size int) (int, error) {
+func verify(mac okapi.Hash, buffer []byte, size int) (int, error) {
 	if mac == nil {
 		return size, nil
 	}

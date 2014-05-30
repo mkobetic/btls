@@ -13,14 +13,14 @@ type SSL30StreamCipher struct {
 }
 
 func (c *SSL30StreamCipher) Seal(buffer []byte, size int) (int, error) {
-	size = macSignSSL30(c.mac, buffer, size)
-	size = streamEncrypt(c.cipher, buffer, size)
+	size = signSSL30(c.mac, buffer, size)
+	encrypt(c.cipher, buffer, size)
 	return size, nil
 }
 
 func (c *SSL30StreamCipher) Open(buffer []byte, size int) (int, error) {
-	size = streamDecrypt(c.cipher, buffer, size)
-	return macVerifySSL30(c.mac, buffer, size)
+	decrypt(c.cipher, buffer, size)
+	return verifySSL30(c.mac, buffer, size)
 }
 
 func (c *SSL30StreamCipher) Close() {
@@ -37,11 +37,17 @@ type SSL30BlockCipher struct {
 	mac    okapi.Hash
 }
 
-func (c *SSL30BlockCipher) Open(buffer []byte, size int) (int, error) {
-	return 0, nil
-}
 func (c *SSL30BlockCipher) Seal(buffer []byte, size int) (int, error) {
-	return 0, nil
+	size = signSSL30(c.mac, buffer, size)
+	size = addPaddingSSL30(c.cipher, buffer, size)
+	encrypt(c.cipher, buffer, size)
+	return size, nil
+}
+
+func (c *SSL30BlockCipher) Open(buffer []byte, size int) (int, error) {
+	decrypt(c.cipher, buffer, size)
+	size = removePadding(c.cipher, buffer, size)
+	return verifySSL30(c.mac, buffer, size)
 }
 
 func (c *SSL30BlockCipher) Close() {
@@ -53,7 +59,17 @@ func (c *SSL30BlockCipher) Close() {
 	}
 }
 
-func macSignSSL30(mac okapi.Hash, buffer []byte, size int) int {
+func addPaddingSSL30(cipher okapi.Cipher, buffer []byte, size int) int {
+	var pad = byte(cipher.BlockSize())
+	pad = pad - byte((size+1)%int(pad))
+	buffer = buffer[BufferHeaderSize+size:]
+	for i := byte(0); i <= pad; i++ {
+		buffer[i] = pad
+	}
+	return size + int(pad) + 1
+}
+
+func signSSL30(mac okapi.Hash, buffer []byte, size int) int {
 	length := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
 	binary.BigEndian.PutUint16(length, uint16(size))
 	if mac == nil {
@@ -67,7 +83,7 @@ func macSignSSL30(mac okapi.Hash, buffer []byte, size int) int {
 	return size
 }
 
-func macVerifySSL30(mac okapi.Hash, buffer []byte, size int) (int, error) {
+func verifySSL30(mac okapi.Hash, buffer []byte, size int) (int, error) {
 	if mac == nil {
 		return size, nil
 	}
