@@ -91,8 +91,8 @@ func (r *Reader) Close() error {
 	return nil
 }
 
-func (r *Reader) SetCipher(cs CipherSpec, v ProtocolVersion, key, iv, macKey []byte) error {
-	r.cipher = NewCipher(cs, v, key, iv, macKey, false)
+func (r *Reader) SetCipher(cs *CipherSpec, v ProtocolVersion, key, iv, macKey []byte) error {
+	r.cipher = cs.New(v, key, iv, macKey, false, nil)
 	return nil
 }
 

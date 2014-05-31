@@ -24,17 +24,17 @@ type CipherSpec struct {
 }
 
 var (
-	NULL_NULL          = CipherSpec{stream, nil, 0, 0, nil, 0}
-	NULL_MD5           = CipherSpec{stream, nil, 0, 0, okapi.MD5, 16}
-	NULL_SHA           = CipherSpec{stream, nil, 0, 0, okapi.SHA1, 20}
-	NULL_SHA256        = CipherSpec{stream, nil, 0, 0, okapi.SHA256, 32}
-	RC4_128_MD5        = CipherSpec{stream, okapi.RC4, 16, 1, okapi.MD5, 16}
-	RC4_128_SHA        = CipherSpec{stream, okapi.RC4, 16, 1, okapi.SHA1, 20}
-	DES_EDE_CBC_SHA    = CipherSpec{block, okapi.DES3_CBC, 24, 8, okapi.SHA1, 20}
-	AES_128_CBC_SHA    = CipherSpec{block, okapi.AES_CBC, 16, 16, okapi.SHA1, 20}
-	AES_128_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 16, 16, okapi.SHA256, 32}
-	AES_256_CBC_SHA    = CipherSpec{block, okapi.AES_CBC, 32, 16, okapi.SHA1, 20}
-	AES_256_CBC_SHA256 = CipherSpec{block, okapi.AES_CBC, 32, 16, okapi.SHA256, 32}
+	NULL_NULL          = &CipherSpec{stream, nil, 0, 0, nil, 0}
+	NULL_MD5           = &CipherSpec{stream, nil, 0, 0, okapi.MD5, 16}
+	NULL_SHA           = &CipherSpec{stream, nil, 0, 0, okapi.SHA1, 20}
+	NULL_SHA256        = &CipherSpec{stream, nil, 0, 0, okapi.SHA256, 32}
+	RC4_128_MD5        = &CipherSpec{stream, okapi.RC4, 16, 1, okapi.MD5, 16}
+	RC4_128_SHA        = &CipherSpec{stream, okapi.RC4, 16, 1, okapi.SHA1, 20}
+	DES_EDE_CBC_SHA    = &CipherSpec{block, okapi.DES3_CBC, 24, 8, okapi.SHA1, 20}
+	AES_128_CBC_SHA    = &CipherSpec{block, okapi.AES_CBC, 16, 16, okapi.SHA1, 20}
+	AES_128_CBC_SHA256 = &CipherSpec{block, okapi.AES_CBC, 16, 16, okapi.SHA256, 32}
+	AES_256_CBC_SHA    = &CipherSpec{block, okapi.AES_CBC, 32, 16, okapi.SHA1, 20}
+	AES_256_CBC_SHA256 = &CipherSpec{block, okapi.AES_CBC, 32, 16, okapi.SHA256, 32}
 )
 
 type Cipher interface {
@@ -43,7 +43,7 @@ type Cipher interface {
 	Close()
 }
 
-func NewCipher(spec CipherSpec, version ProtocolVersion, key, iv, macKey []byte, encrypt bool) Cipher {
+func (spec *CipherSpec) New(version ProtocolVersion, key, iv, macKey []byte, encrypt bool, random okapi.Random) Cipher {
 	var cipher okapi.Cipher
 	var mac okapi.Hash
 	if spec.Cipher != nil {
@@ -59,6 +59,7 @@ func NewCipher(spec CipherSpec, version ProtocolVersion, key, iv, macKey []byte,
 			return &SSL30BlockCipher{cipher: cipher, mac: mac}
 		}
 	}
+	// TLS uses HMAC and explicit IVs (except TLS10)
 	if spec.MAC != nil {
 		mac = okapi.HMAC.New(spec.MAC, macKey)
 	}
@@ -69,14 +70,18 @@ func NewCipher(spec CipherSpec, version ProtocolVersion, key, iv, macKey []byte,
 		if version == TLS10 {
 			return &TLS10BlockCipher{cipher: cipher, mac: mac}
 		}
-		return &BlockCipher{cipher: cipher, mac: mac}
+		return &BlockCipher{cipher: cipher, mac: mac, random: random}
 	case aead:
 		return &AEADCipher{cipher: cipher, mac: mac}
 	}
 	return nil
 }
 
-// TLS uses HMAC and explicit IVs (except TLS10)
+var (
+	// default Random used if one is not provided
+	Random = okapi.DefaultRandom.New()
+)
+
 type StreamCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash
@@ -133,13 +138,22 @@ func (c *TLS10BlockCipher) Close() {
 type BlockCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash
+	random okapi.Random
+}
+
+func (c *BlockCipher) Seal(buffer []byte, size int) (int, error) {
+	size = sign(c.mac, buffer, size)
+	size = insertIV(buffer, size, c.cipher.BlockSize(), c.random)
+	size = addPadding(c.cipher, buffer, size)
+	encrypt(c.cipher, buffer, size)
+	return size, nil
 }
 
 func (c *BlockCipher) Open(buffer []byte, size int) (int, error) {
-	return 0, nil
-}
-func (c *BlockCipher) Seal(buffer []byte, size int) (int, error) {
-	return 0, nil
+	decrypt(c.cipher, buffer, size)
+	size = removePadding(c.cipher, buffer, size)
+	size = removeIV(buffer, size, c.cipher.BlockSize())
+	return verify(c.mac, buffer, size)
 }
 
 func (c *BlockCipher) Close() {
@@ -148,6 +162,9 @@ func (c *BlockCipher) Close() {
 	}
 	if c.mac != nil {
 		c.mac.Close()
+	}
+	if c.random != nil {
+		c.random.Close()
 	}
 }
 
@@ -198,6 +215,26 @@ func decrypt(cipher okapi.Cipher, buffer []byte, size int) {
 func addPadding(cipher okapi.Cipher, buffer []byte, size int) int {
 	// TODO: Add randomized padding length
 	return addPaddingSSL30(cipher, buffer, size)
+}
+
+func insertIV(buffer []byte, size int, ivSize int, random okapi.Random) int {
+	if random == nil {
+		random = Random // Use default Random.
+	}
+	buffer = buffer[BufferHeaderSize:]
+	// Shift data to the right to make room for the IV.
+	copy(buffer[ivSize:], buffer[:size])
+	// Generate the IV.
+	_, err := random.Read(buffer[:ivSize])
+	_assert(err == nil, "IV generation failed %s", err)
+	return size + ivSize
+}
+
+func removeIV(buffer []byte, size int, ivSize int) int {
+	buffer = buffer[BufferHeaderSize:]
+	// Shift data to the left over the IV.
+	copy(buffer, buffer[ivSize:size])
+	return size - ivSize
 }
 
 func removePadding(cipher okapi.Cipher, buffer []byte, size int) int {

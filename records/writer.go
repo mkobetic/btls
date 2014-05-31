@@ -2,6 +2,7 @@ package records
 
 import (
 	"encoding/binary"
+	"github.com/mkobetic/okapi"
 	"io"
 )
 
@@ -41,7 +42,7 @@ func NewWriter(writer io.Writer, buffer []byte) *Writer {
 	w.free = content
 	w.SetVersion(SSL30)
 	w.SetContentType(Handshake)
-	w.SetCipher(NULL_NULL, SSL30, nil, nil, nil)
+	w.SetCipher(NULL_NULL, SSL30, nil, nil, nil, nil)
 	return w
 }
 
@@ -146,13 +147,13 @@ func (w *Writer) SetContentType(t ContentType) error {
 	return nil
 }
 
-func (w *Writer) SetCipher(cs CipherSpec, v ProtocolVersion, key, iv, macKey []byte) error {
+func (w *Writer) SetCipher(cs *CipherSpec, v ProtocolVersion, key, iv, macKey []byte, random okapi.Random) error {
 	if !w.bufferEmpty() {
 		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
-	w.cipher = NewCipher(cs, v, key, iv, macKey, true)
+	w.cipher = cs.New(v, key, iv, macKey, true, random)
 	return nil
 }
 

@@ -35,8 +35,8 @@ const (
 	// Buffer holds seq_num (uint64) before the full TLS record
 	BufferHeaderSize = HeaderSize + 8
 	// Minimum space required at the end of the buffer to accommodate
-	// largest MAC and padding for the largest block cipher (= block size)
-	MinBufferTrailerSize = 16 + 32
+	// largest MAC and padding for the largest block cipher and explicit IV (2 x block size)
+	MinBufferTrailerSize = 32 + 16 + 16
 )
 
 var (
