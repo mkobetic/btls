@@ -13,12 +13,11 @@ func Test_RW_NULL_SHA(t *testing.T)  { testReadWrite(t, 16384, 1024, NULL_SHA, S
 func Test_RW_RC4_128_MD5(t *testing.T) { testReadWrite(t, 16384, 1024, RC4_128_MD5, SSL30) }
 func Test_RW_RC4_128_SHA(t *testing.T) { testReadWrite(t, 16384, 1024, RC4_128_SHA, TLS12) }
 
-//func Test_RW_3DES_EDE_CBC_SHA(t *testing.T) { testReadWrite(t, 16384, 1024, DES_EDE_CBC_SHA, SSL30) }
-func Test_RW_AES_128_CBC_SHA(t *testing.T) { testReadWrite(t, 16384, 1024, AES_128_CBC_SHA, TLS10) }
-
-//func Test_RW_AES_256_CBC_SHA256(t *testing.T) {
-//	testReadWrite(t, 16384, 1024, AES_256_CBC_SHA256, TLS12)
-//}
+func Test_RW_3DES_EDE_CBC_SHA(t *testing.T) { testReadWrite(t, 16384, 1024, DES_EDE_CBC_SHA, SSL30) }
+func Test_RW_AES_128_CBC_SHA(t *testing.T)  { testReadWrite(t, 16384, 1024, AES_128_CBC_SHA, TLS10) }
+func Test_RW_AES_256_CBC_SHA256(t *testing.T) {
+	testReadWrite(t, 16384, 1024, AES_256_CBC_SHA256, TLS12)
+}
 func testReadWrite(t *testing.T, payloadSize int, recordSize int, cs *CipherSpec, v ProtocolVersion) {
 	var key, iv, macKey []byte
 	if cs.Cipher != nil {

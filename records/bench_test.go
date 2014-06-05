@@ -45,9 +45,21 @@ func benchmarkRead(b *testing.B, size int) {
 	}
 }
 
-func Benchmark16K_NULL_SHA_TLS10(b *testing.B)    { benchmarkRW(b, 4096, 16384, NULL_SHA, TLS10) }
-func Benchmark16K_RC4_128_SHA_TLS10(b *testing.B) { benchmarkRW(b, 4096, 16384, RC4_128_SHA, TLS10) }
-func benchmarkRW(b *testing.B, payloadSize int, recordSize int, cs *CipherSpec, v ProtocolVersion) {
+func BenchmarkRW_NULL_NULL_TLS10(b *testing.B)   { benchmarkRW(b, 1024, 16384, NULL_NULL, TLS10) }
+func BenchmarkRW_NULL_MD5_SSL30(b *testing.B)    { benchmarkRW(b, 1024, 16384, NULL_MD5, SSL30) }
+func BenchmarkRW_NULL_SHA_TLS11(b *testing.B)    { benchmarkRW(b, 1024, 16384, NULL_SHA, TLS11) }
+func BenchmarkRW_RC4_128_MD5_SSL30(b *testing.B) { benchmarkRW(b, 1024, 16384, RC4_128_MD5, SSL30) }
+func BenchmarkRW_RC4_128_SHA_TSL12(b *testing.B) { benchmarkRW(b, 1024, 16384, RC4_128_SHA, TLS12) }
+func BenchmarkRW_3DES_EDE_CBC_SHA_SSL30(b *testing.B) {
+	benchmarkRW(b, 1024, 16384, DES_EDE_CBC_SHA, SSL30)
+}
+func BenchmarkRW_AES_128_CBC_SHA_TLS10(b *testing.B) {
+	benchmarkRW(b, 1024, 16384, AES_128_CBC_SHA, TLS10)
+}
+func BenchmarkRW_AES_256_CBC_SHA256_TLS12(b *testing.B) {
+	benchmarkRW(b, 1024, 16384, AES_256_CBC_SHA256, TLS12)
+}
+func benchmarkRW(b *testing.B, recordSize int, payloadSize int, cs *CipherSpec, v ProtocolVersion) {
 	var key, iv, macKey []byte
 	if cs.Cipher != nil {
 		key = bytes.Repeat([]byte{42}, cs.CipherKeySize)
@@ -67,6 +79,9 @@ func benchmarkRW(b *testing.B, payloadSize int, recordSize int, cs *CipherSpec, 
 	for n := 0; n < b.N; n++ {
 		if size, err := w.Write(payload); size != payloadSize || err != nil {
 			panic(fmt.Sprintf("Write size=%d err=%s", size, err))
+		}
+		if err := w.Flush(); err != nil {
+			panic(fmt.Sprintf("Flush failed: %s", err))
 		}
 		if size, err := r.Read(payload); err != nil {
 			panic(fmt.Sprintf("Read size=%d err=%s", size, err))
