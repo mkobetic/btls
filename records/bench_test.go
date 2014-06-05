@@ -2,6 +2,7 @@ package records
 
 import (
 	"bytes"
+	"fmt"
 	//"io"
 	//"os"
 	//"syscall"
@@ -14,6 +15,7 @@ func BenchmarkWrite16K_512(b *testing.B)  { benchmarkWrite(b, 512) }
 func BenchmarkWrite16K_1024(b *testing.B) { benchmarkWrite(b, 1024) }
 func BenchmarkWrite16K_2048(b *testing.B) { benchmarkWrite(b, 2048) }
 func BenchmarkWrite16K_4096(b *testing.B) { benchmarkWrite(b, 4096) }
+func BenchmarkWrite16K_8192(b *testing.B) { benchmarkWrite(b, 8192) }
 func benchmarkWrite(b *testing.B, size int) {
 	buffer := new(bytes.Buffer)
 	w := NewWriter(buffer, make([]byte, size))
@@ -40,6 +42,36 @@ func benchmarkRead(b *testing.B, size int) {
 		buffer := bytes.NewBuffer(records)
 		r := NewReader(buffer, nil)
 		r.Read(content)
+	}
+}
+
+func Benchmark16K_NULL_SHA_TLS10(b *testing.B)    { benchmarkRW(b, 4096, 16384, NULL_SHA, TLS10) }
+func Benchmark16K_RC4_128_SHA_TLS10(b *testing.B) { benchmarkRW(b, 4096, 16384, RC4_128_SHA, TLS10) }
+func benchmarkRW(b *testing.B, payloadSize int, recordSize int, cs *CipherSpec, v ProtocolVersion) {
+	var key, iv, macKey []byte
+	if cs.Cipher != nil {
+		key = bytes.Repeat([]byte{42}, cs.CipherKeySize)
+		if cs.kind == block {
+			iv = bytes.Repeat([]byte{42}, cs.CipherBlockSize)
+		}
+	}
+	if cs.MAC != nil {
+		macKey = bytes.Repeat([]byte{42}, cs.MACKeySize)
+	}
+	buffer := new(bytes.Buffer)
+	w := NewWriter(buffer, make([]byte, recordSize+MinBufferTrailerSize))
+	w.SetCipher(cs, v, key, iv, macKey, nil)
+	r := NewReader(buffer, nil)
+	r.SetCipher(cs, v, key, iv, macKey)
+	payload := make([]byte, payloadSize)
+	for n := 0; n < b.N; n++ {
+		if size, err := w.Write(payload); size != payloadSize || err != nil {
+			panic(fmt.Sprintf("Write size=%d err=%s", size, err))
+		}
+		if size, err := r.Read(payload); err != nil {
+			panic(fmt.Sprintf("Read size=%d err=%s", size, err))
+		}
+		buffer.Reset()
 	}
 }
 

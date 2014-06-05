@@ -66,7 +66,10 @@ func addPaddingSSL30(cipher okapi.Cipher, buffer []byte, size int) int {
 	for i := byte(0); i <= pad; i++ {
 		buffer[i] = pad
 	}
-	return size + int(pad) + 1
+	size = size + int(pad) + 1
+	lengthField := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
+	binary.BigEndian.PutUint16(lengthField, uint16(size))
+	return size
 }
 
 func signSSL30(mac okapi.Hash, buffer []byte, size int) int {

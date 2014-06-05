@@ -1,6 +1,7 @@
 package records
 
 import (
+	"encoding/binary"
 	"io"
 )
 
@@ -76,6 +77,13 @@ func (r *Reader) readRecord() error {
 		return err
 	}
 	_assert(m == length, "incomplete record read %d, expected %d", m, length)
+
+	binary.BigEndian.PutUint64(r.buffer[0:8], r.seqNum)
+	r.seqNum += 1
+	if r.seqNum == 0xFFFFFFFFFFFFFFFF {
+		return RecordSequenceNumberOverflow
+	}
+
 	length, err = r.cipher.Open(r.buffer, length)
 	if err != nil {
 		return err
