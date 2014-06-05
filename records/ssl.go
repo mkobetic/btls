@@ -62,9 +62,9 @@ func (c *SSL30BlockCipher) Close() {
 func addPaddingSSL30(cipher okapi.Cipher, buffer []byte, size int) int {
 	var pad = byte(cipher.BlockSize())
 	pad = pad - byte((size+1)%int(pad))
-	buffer = buffer[BufferHeaderSize+size:]
+	padField := buffer[BufferHeaderSize+size:]
 	for i := byte(0); i <= pad; i++ {
-		buffer[i] = pad
+		padField[i] = pad
 	}
 	size = size + int(pad) + 1
 	lengthField := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
