@@ -2,7 +2,6 @@ package records
 
 import (
 	"github.com/mkobetic/okapi"
-	_ "github.com/mkobetic/okapi/libcrypto"
 	"testing"
 )
 

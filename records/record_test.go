@@ -2,7 +2,6 @@ package records
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 )
 
@@ -43,7 +42,6 @@ func testReadWrite(t *testing.T, payloadSize int, recordSize int, cs *CipherSpec
 	if err = w.Flush(); err != nil {
 		t.Fatal("Flush failed: %s", err)
 	}
-	fmt.Printf("Buffer len;:%d \n", buffer.Len())
 	if size, err = r.Read(payload); err != nil {
 		t.Fatalf("Read size=%d err=%s\n", size, err)
 	}
