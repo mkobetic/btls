@@ -98,6 +98,7 @@ func (w *Writer) Close() error {
 			return err
 		}
 	}
+	w.cipher.Close()
 	if c, ok := w.writer.(io.Closer); ok {
 		return c.Close()
 	}

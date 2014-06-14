@@ -40,7 +40,7 @@ func testReadWrite(t *testing.T, payloadSize int, recordSize int, cs *CipherSpec
 		t.Fatalf("Write size=%d err=%s\n", size, err)
 	}
 	if err = w.Flush(); err != nil {
-		t.Fatal("Flush failed: %s", err)
+		t.Fatalf("Flush failed: %s\n", err)
 	}
 	if size, err = r.Read(payload); err != nil {
 		t.Fatalf("Read size=%d err=%s\n", size, err)

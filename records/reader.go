@@ -93,6 +93,7 @@ func (r *Reader) readRecord() error {
 }
 
 func (r *Reader) Close() error {
+	r.cipher.Close()
 	if c, ok := r.reader.(io.Closer); ok {
 		return c.Close()
 	}

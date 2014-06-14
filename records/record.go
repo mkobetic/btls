@@ -1,3 +1,16 @@
+/*
+Package records implements the record layer of SSL/TLS protocol,
+responsible for encryption and integrity of the payload.
+
+Main API is represented by the Reader and Writer that transparently
+translate plain payload to/from the prescribed record frames according
+to the configured protocol version and security parameters.
+
+Cryptographic protection is provided by Ciphers which are created from
+CipherSpecs and appropriate keying material. In this context a Cipher represents
+specific combination of an encryption and MAC algorithm. There are several Cipher
+implementations reflecting the nuances of different Cipher types and ProtocolVersions.
+*/
 package records
 
 import (
@@ -9,10 +22,10 @@ type ProtocolVersion uint16
 
 const (
 	TLSXX ProtocolVersion = 0x0000 // unspecified protocol version
-	SSL30 ProtocolVersion = 0x0300
-	TLS10 ProtocolVersion = 0x0301
-	TLS11 ProtocolVersion = 0x0302
-	TLS12 ProtocolVersion = 0x0303
+	SSL30 ProtocolVersion = 0x0300 // SSL 3.0
+	TLS10 ProtocolVersion = 0x0301 // TLS 1.0
+	TLS11 ProtocolVersion = 0x0302 // TLS 1.1
+	TLS12 ProtocolVersion = 0x0303 // TLS 1.2
 )
 
 type ContentType uint8
@@ -40,11 +53,11 @@ const (
 )
 
 var (
-	InvalidRecordMAC             = errors.New("Invalid record MAC!")
-	RecordSequenceNumberOverflow = errors.New("Maximum record sequence number reached!")
-	UnexpectedRecordContentType  = errors.New("Received a record with unexpected content type.")
-	WrongRecordVersion           = errors.New("Received a record with wrong protocol version.")
-	RecordTooLarge               = errors.New("Incoming record reports length exceeding maximum allowed record size.")
+	InvalidRecordMAC             = errors.New("incoming record has invalid record MAC")
+	RecordSequenceNumberOverflow = errors.New("maximum record sequence number reached")
+	UnexpectedRecordContentType  = errors.New("incoming record has unexpected content type")
+	WrongRecordVersion           = errors.New("incoming record has wrong protocol version")
+	RecordTooLarge               = errors.New("incoming record exceeds maximum allowed record size")
 )
 
 //type Record struct {
