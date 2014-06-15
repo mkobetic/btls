@@ -92,6 +92,7 @@ func (r *Reader) readRecord() error {
 	return nil
 }
 
+// Close releases any associated resources.
 func (r *Reader) Close() error {
 	r.cipher.Close()
 	if c, ok := r.reader.(io.Closer); ok {
@@ -100,6 +101,8 @@ func (r *Reader) Close() error {
 	return nil
 }
 
+// SetCipher reconfigures the Reader with the new security parameters.
+// Subsequent Reads will process new records using the new parameters.
 func (r *Reader) SetCipher(cs *CipherSpec, v ProtocolVersion, key, iv, macKey []byte) error {
 	r.cipher = cs.New(v, key, iv, macKey, false, nil)
 	return nil

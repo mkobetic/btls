@@ -6,6 +6,7 @@ import (
 	"github.com/mkobetic/okapi"
 )
 
+// CipherKind represents different Cipher types as defined by the protocol specification.
 type CipherKind int
 
 const (
@@ -14,6 +15,8 @@ const (
 	aead
 )
 
+// CipherSpec describes specific combination of encryption and MAC algorithms.
+// Legal combinations are defined by the protocol specification and other associated RFCs.
 type CipherSpec struct {
 	kind            CipherKind
 	Cipher          okapi.CipherSpec
@@ -23,6 +26,7 @@ type CipherSpec struct {
 	MACKeySize      int
 }
 
+// Standard supported CipherSpecs
 var (
 	NULL_NULL          = &CipherSpec{stream, nil, 0, 0, nil, 0}
 	NULL_MD5           = &CipherSpec{stream, nil, 0, 0, okapi.MD5, 16}
@@ -37,12 +41,18 @@ var (
 	AES_256_CBC_SHA256 = &CipherSpec{block, okapi.AES_CBC, 32, 16, okapi.SHA256, 32}
 )
 
+// Cipher defines the interface of SSL/TLS record ciphers as defined by the protocol specification.
 type Cipher interface {
+	// Open decrypts and verifies integrity of an incoming record.
 	Open(buffer []byte, size int) (int, error)
+	// Seal encrypts and signs an outgoing record.
 	Seal(buffer []byte, size int) (int, error)
+	// Close securely releases associated resources.
+	// It MUST be called before a Cipher instance is discarded.
 	Close()
 }
 
+// New creates and configures an appropriate Cipher implemetation for the provided security parameters.
 func (spec *CipherSpec) New(version ProtocolVersion, key, iv, macKey []byte, encrypt bool, random okapi.Random) Cipher {
 	var cipher okapi.Cipher
 	var mac okapi.Hash
@@ -78,10 +88,11 @@ func (spec *CipherSpec) New(version ProtocolVersion, key, iv, macKey []byte, enc
 }
 
 var (
-	// default Random used if one is not provided
+	// The default Random used by Ciphers if one is not provided.
 	Random = okapi.DefaultRandom.New()
 )
 
+// StreamCipher implements TLS stream cipher. It is used for TLS 1.0, 1.1, and 1.2.
 type StreamCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash
@@ -107,7 +118,7 @@ func (c *StreamCipher) Close() {
 	}
 }
 
-// TLS 1.0 needs specialized block cipher because it still uses implicit IVs
+// TLS 1.0 needs specialized block cipher because it still uses implicit IVs.
 type TLS10BlockCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash
@@ -135,6 +146,7 @@ func (c *TLS10BlockCipher) Close() {
 	}
 }
 
+// BlockCipher implements TLS block cipher, used by TLS 1.1 and 1.2.
 type BlockCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash
@@ -168,6 +180,7 @@ func (c *BlockCipher) Close() {
 	}
 }
 
+// AEADCipher implements TLS 1.2 aead cipher.
 type AEADCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash

@@ -5,6 +5,8 @@ import (
 	"github.com/mkobetic/okapi"
 )
 
+// SSL30MAC implements the custom MAC algorithm used by SSL3.0.
+// It supports the required okapi.Hash interface.
 type SSL30MAC struct {
 	pad1   []byte
 	pad2   []byte

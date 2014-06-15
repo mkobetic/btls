@@ -18,6 +18,7 @@ import (
 	"fmt"
 )
 
+// ProtocolVersion encodes specific SSL/TLS protocol versions.
 type ProtocolVersion uint16
 
 const (
@@ -28,6 +29,7 @@ const (
 	TLS12 ProtocolVersion = 0x0303 // TLS 1.2
 )
 
+// ContentType defines standard SSL/TLS record types
 type ContentType uint8
 
 const (
@@ -37,6 +39,7 @@ const (
 	ApplicationData  ContentType = 23
 )
 
+// Constants defined by the protocol specification.
 const (
 	HeaderSize          = 5
 	MaxPlaintextLength  = 1 << 14
@@ -44,6 +47,7 @@ const (
 	MaxCiphertextLength = MaxCompressedLength + 1024
 )
 
+// Implementation specific constants.
 const (
 	// Buffer holds seq_num (uint64) before the full TLS record
 	BufferHeaderSize = HeaderSize + 8

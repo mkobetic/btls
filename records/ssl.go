@@ -6,7 +6,7 @@ import (
 	"github.com/mkobetic/okapi"
 )
 
-// SSL30 uses custom MAC and implicit IVs
+// SSL3.0 uses custom MAC.
 type SSL30StreamCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash
@@ -32,6 +32,7 @@ func (c *SSL30StreamCipher) Close() {
 	}
 }
 
+// SSL3.0 uses custom MAC and implicit IVs.
 type SSL30BlockCipher struct {
 	cipher okapi.Cipher
 	mac    okapi.Hash

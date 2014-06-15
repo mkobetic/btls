@@ -148,6 +148,9 @@ func (w *Writer) SetContentType(t ContentType) error {
 	return nil
 }
 
+// SetCipher reconfigures the Writer with the new security parameters.
+// If there is any previously buffered content, it is flushed in a record
+// protected with the previous security parameters.
 func (w *Writer) SetCipher(cs *CipherSpec, v ProtocolVersion, key, iv, macKey []byte, random okapi.Random) error {
 	if !w.bufferEmpty() {
 		if err := w.Flush(); err != nil {
