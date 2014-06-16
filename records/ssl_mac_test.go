@@ -16,14 +16,14 @@ func Test_SSL30MAC_MD5(t *testing.T) {
 	defer md5.Close()
 	md5.Write(key)
 	for i := 0; i < 6; i++ {
-		md5.Write(PAD1)
+		md5.Write(SSL30MACPAD1)
 	}
 	md5.Write(payload)
 	inner := md5.Digest()
 	md5.Reset()
 	md5.Write(key)
 	for i := 0; i < 6; i++ {
-		md5.Write(PAD2)
+		md5.Write(SSL30MACPAD2)
 	}
 	md5.Write(inner)
 	expected := md5.Digest()

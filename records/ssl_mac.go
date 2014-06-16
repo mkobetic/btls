@@ -15,11 +15,11 @@ type SSL30MAC struct {
 }
 
 var (
-	PAD1 = bytes.Repeat([]byte{0x36}, 8)
-	PAD2 = bytes.Repeat([]byte{0x5c}, 8)
+	SSL30MACPAD1 = bytes.Repeat([]byte{0x36}, 8)
+	SSL30MACPAD2 = bytes.Repeat([]byte{0x5c}, 8)
 )
 
-func NewSSL30MAC(hs okapi.HashSpec, key []byte) okapi.Hash {
+func NewSSL30MAC(hs okapi.HashSpec, key []byte) *SSL30MAC {
 	hash := hs.New()
 	var pad1, pad2 []byte
 	var size int
@@ -31,9 +31,9 @@ func NewSSL30MAC(hs okapi.HashSpec, key []byte) okapi.Hash {
 	pad1 = make([]byte, size)
 	pad2 = make([]byte, size, size+hash.Size())
 	copy(pad1, key)
-	fill(pad1[len(key):], PAD1)
+	fill(pad1[len(key):], SSL30MACPAD1)
 	copy(pad2, key)
-	fill(pad2[len(key):], PAD2)
+	fill(pad2[len(key):], SSL30MACPAD2)
 	hash.Write(pad1)
 	return &SSL30MAC{pad1: pad1, pad2: pad2, hash: hash}
 }
