@@ -1,4 +1,4 @@
-This package implements TLS protocol (SSL 3.0 and TLS 1.0, 1.1 and 1.2).
+![yellow submarine](yellow_submarine.png) This package implements TLS protocol (SSL 3.0 and TLS 1.0, 1.1 and 1.2).
 
 	**Currently early WIP**
 
