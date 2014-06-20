@@ -262,8 +262,9 @@ func sign(mac okapi.Hash, buffer []byte, size int) int {
 	if mac == nil {
 		return size
 	}
-	// Hash whole buffer (including the seq_num and record header).
-	mac.Write(buffer[:BufferHeaderSize+size])
+	// Hash whole buffer (including the seq_num and record header),
+	// but excluding the explicit IV room at the beginning.
+	mac.Write(buffer[MaxBlockSize : BufferHeaderSize+size])
 	// Append the digest at the end.
 	size += copy(buffer[BufferHeaderSize+size:], mac.Digest())
 	mac.Reset()
@@ -281,7 +282,9 @@ func verify(mac okapi.Hash, buffer []byte, size int) (int, error) {
 	// so that we can feed the buffer directly into to the MAC function.
 	lengthHeader := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
 	binary.BigEndian.PutUint16(lengthHeader, uint16(size))
-	mac.Write(buffer[:BufferHeaderSize+size])
+	// Hash whole buffer (including the seq_num and record header),
+	// but excluding the explicit IV room at the beginning.
+	mac.Write(buffer[MaxBlockSize : BufferHeaderSize+size])
 	buffer = buffer[BufferHeaderSize+size:]
 	// Check that the computed digest matches the received digest.
 	ok := subtle.ConstantTimeCompare(buffer[:mac.Size()], mac.Digest()) == 1

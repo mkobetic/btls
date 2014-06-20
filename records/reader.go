@@ -23,11 +23,11 @@ type Reader struct {
 // otherwise the Reader will not be created. If buffer is nil a new buffer is allocated.
 func NewReader(reader io.Reader, buffer []byte) *Reader {
 	if buffer == nil {
-		buffer = make([]byte, MaxCiphertextLength+HeaderSize)
-	} else if len(buffer) > MaxCiphertextLength+HeaderSize {
+		buffer = make([]byte, MaxBufferSize)
+	} else if len(buffer) > MaxBufferSize {
 		// Make sure buffer does not exceed maximum record length
-		buffer = buffer[:MaxCiphertextLength+HeaderSize]
-	} else if len(buffer) < MaxCiphertextLength+HeaderSize {
+		buffer = buffer[:MaxBufferSize]
+	} else if len(buffer) < MaxBufferSize {
 		// buffer must be large enough to fit a largest legal size record
 		return nil
 	}

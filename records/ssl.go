@@ -79,8 +79,16 @@ func signSSL30(mac okapi.Hash, buffer []byte, size int) int {
 	if mac == nil {
 		return size
 	}
-	mac.Write(buffer[:BufferHeaderSize-4])                        // seq_num + type +
-	mac.Write(buffer[BufferHeaderSize-2 : BufferHeaderSize+size]) // length + fragment
+	// shift seq_num + type 2 bytes over version
+	var header = buffer[MaxBlockSize : BufferHeaderSize-2]
+	copy(header[2:], header)
+	//mac.Write(buffer[MaxBlockSize : BufferHeaderSize-4])          // seq_num + type +
+	//mac.Write(buffer[BufferHeaderSize-2 : BufferHeaderSize+size]) // length + fragment
+	mac.Write(buffer[MaxBlockSize+2 : BufferHeaderSize+size])
+	// unshift seq_num + type and restore version
+	copy(header, header[2:])
+	binary.BigEndian.PutUint16(header[len(header)-2:], uint16(SSL30))
+	// copy record digest to the end of the record
 	size += copy(buffer[BufferHeaderSize+size:], mac.Digest())
 	mac.Reset()
 	binary.BigEndian.PutUint16(length, uint16(size))
@@ -94,8 +102,15 @@ func verifySSL30(mac okapi.Hash, buffer []byte, size int) (int, error) {
 	size -= mac.Size()
 	length := buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
 	binary.BigEndian.PutUint16(length, uint16(size))
-	mac.Write(buffer[:BufferHeaderSize-4])                        // seq_num + type +
-	mac.Write(buffer[BufferHeaderSize-2 : BufferHeaderSize+size]) // length + fragment
+	// shift seq_num + type 2 bytes over version
+	var header = buffer[MaxBlockSize : BufferHeaderSize-2]
+	copy(header[2:], header)
+	//mac.Write(buffer[MaxBlockSize : BufferHeaderSize-4])          // seq_num + type +
+	//mac.Write(buffer[BufferHeaderSize-2 : BufferHeaderSize+size]) // length + fragment
+	mac.Write(buffer[MaxBlockSize+2 : BufferHeaderSize+size])
+	// unshift seq_num + type and restore version
+	copy(header, header[2:])
+	binary.BigEndian.PutUint16(header[len(header)-2:], uint16(SSL30))
 	buffer = buffer[BufferHeaderSize+size:]
 	ok := subtle.ConstantTimeCompare(buffer[:mac.Size()], mac.Digest()) == 1
 	mac.Reset()

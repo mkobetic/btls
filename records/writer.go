@@ -28,12 +28,11 @@ type Writer struct {
 // It also controls the maximum size of TLS records that the writer produces.
 // If buffer is nil a new buffer is allocated with default (maximum) record size.
 func NewWriter(writer io.Writer, buffer []byte) *Writer {
-	maxSize := MaxCiphertextLength + BufferHeaderSize
 	if buffer == nil {
-		buffer = make([]byte, maxSize)
-	} else if len(buffer) > maxSize {
+		buffer = make([]byte, MaxBufferSize)
+	} else if len(buffer) > MaxBufferSize {
 		// Make sure buffer does not exceed maximum record length
-		buffer = buffer[:maxSize]
+		buffer = buffer[:MaxBufferSize]
 	}
 	w := &Writer{writer: writer, buffer: buffer}
 	w.record = buffer[BufferHeaderSize-HeaderSize:] // first 8 bytes are seq_num

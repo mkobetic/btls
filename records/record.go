@@ -49,11 +49,18 @@ const (
 
 // Implementation specific constants.
 const (
-	// Buffer holds seq_num (uint64) before the full TLS record
-	BufferHeaderSize = HeaderSize + 8
+	// Largest cipher block size.
+	MaxBlockSize = 16
+	// Largest MAC digest size.
+	MaxDigestSize = 32
+	// Maximum buffer size.
+	MaxBufferSize = MaxCiphertextLength + BufferHeaderSize
+	// Buffer holds seq_num (uint64) before the full TLS record.
+	// For explicit IV ciphers it also needs room for insertion of the IV
+	BufferHeaderSize = HeaderSize + 8 + MaxBlockSize
 	// Minimum space required at the end of the buffer to accommodate
 	// largest MAC and padding for the largest block cipher and explicit IV (2 x block size)
-	MinBufferTrailerSize = 32 + 16 + 16
+	MinBufferTrailerSize = MaxDigestSize + 2*MaxBlockSize
 )
 
 var (
