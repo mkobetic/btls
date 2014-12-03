@@ -75,33 +75,92 @@ func Test_ExplicitIV(t *testing.T) {
 	if length != 30 {
 		t.Fatalf("Wrong length after insertion: %d", length)
 	}
-	for i := 0; i < BufferHeaderSize-HeaderSize-ivSize; i++ {
+	i := 0
+	// Check the unmodified prefix
+	for ; i < BufferHeaderSize-HeaderSize-ivSize; i++ {
 		if buffer[i] != byte(i) {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
 	}
-	for i := BufferHeaderSize - HeaderSize - ivSize; i < BufferHeaderSize-HeaderSize; i++ {
+	t.Logf("Prefix ends at %d", i)
+	// Check the shifted header
+	for ; i < BufferHeaderSize-ivSize-2; i++ {
 		if buffer[i] != byte(i+ivSize) {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
 	}
-	for i := BufferHeaderSize - HeaderSize; i < BufferHeaderSize; i++ {
+	// Check the length field
+	if buffer[i] != 0 {
+		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	}
+	i++
+	if buffer[i] != byte(length) {
+		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	}
+	i++
+	// Check the inserted IV
+	for ; i < BufferHeaderSize; i++ {
 		if buffer[i] != 255 {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
 	}
-	for i := BufferHeaderSize; i < len(buffer); i++ {
+	// Check the record contents
+	for ; i < len(buffer); i++ {
 		if buffer[i] != byte(i) {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
 	}
-
+	//length := removeIV(buffer, length, ivSize)
+	//if length != 20 {
+	//	t.Fatalf("Wrong length after removal: %d", length)
+	//}
+	//i = 0
+	//// Check the unmodified prefix
+	//for ; i < BufferHeaderSize-HeaderSize-ivSize; i++ {
+	//	if buffer[i] != byte(i) {
+	//		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	//	}
+	//}
+	//// Check the shifted sequence number
+	//for ; i < BufferHeaderSize-HeaderSize-ivSize+8; i++ {
+	//	if buffer[i] != byte(i-8) {
+	//		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	//	}
+	//}
+	//// Check the shifted header
+	//for ; i < BufferHeaderSize-ivSize-2; i++ {
+	//	if buffer[i] != byte(i+ivSize) {
+	//		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	//	}
+	//}
+	//// Check the length field
+	//if buffer[i] != 0 {
+	//	t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	//}
+	//i++
+	//if buffer[i] != byte(length) {
+	//	t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	//}
+	//i++
+	//// Check the inserted IV
+	//for ; i < BufferHeaderSize; i++ {
+	//	if buffer[i] != 255 {
+	//		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	//	}
+	//}
+	//// Check the record contents
+	//for ; i < len(buffer); i++ {
+	//	if buffer[i] != byte(i) {
+	//		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	//	}
+	//}
 }
 
 type FakeRandom struct{}
 
 func (f *FakeRandom) Read(s []byte) (int, error) {
 	for i := 0; i < len(s); i++ {
+		s[i] = 255
 	}
 	return len(s), nil
 }

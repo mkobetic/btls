@@ -68,6 +68,10 @@ type Cipher interface {
 	// Close securely releases associated resources.
 	// It MUST be called before a Cipher instance is discarded.
 	Close()
+	// RecordOffset specifies the expected start of a record in a buffer.
+	// For most Ciphers that is BufferHeaderSize-HeaderSize, but for block cipher in TLS1.1 and later
+	// it is further offset by the BlockSize to accommodate the explict IV.
+	RecordOffset() int
 }
 
 // New creates and configures an appropriate Cipher implemetation for the provided security parameters.
@@ -118,7 +122,7 @@ type StreamCipher struct {
 
 func (c *StreamCipher) Open(buffer []byte, size int) ([]byte, error) {
 	decrypt(c.cipher, buffer, size, 0)
-	return verify(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size, 0)
+	return verify(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size)
 }
 
 func (c *StreamCipher) Seal(buffer []byte, size int) ([]byte, error) {
@@ -133,6 +137,10 @@ func (c *StreamCipher) Close() {
 	if c.mac != nil {
 		c.mac.Close()
 	}
+}
+
+func (c *StreamCipher) RecordOffset() int {
+	return BufferHeaderSize - HeaderSize
 }
 
 // TLS 1.0 needs specialized block cipher because it still uses implicit IVs.
@@ -151,7 +159,7 @@ func (c *TLS10BlockCipher) Seal(buffer []byte, size int) ([]byte, error) {
 func (c *TLS10BlockCipher) Open(buffer []byte, size int) ([]byte, error) {
 	decrypt(c.cipher, buffer, size, 0)
 	size = removePadding(c.cipher, buffer, size)
-	return verify(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size, 0)
+	return verify(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size)
 }
 
 func (c *TLS10BlockCipher) Close() {
@@ -164,6 +172,10 @@ func (c *TLS10BlockCipher) Close() {
 	if c.random != nil {
 		c.random.Close()
 	}
+}
+
+func (c *TLS10BlockCipher) RecordOffset() int {
+	return BufferHeaderSize - HeaderSize
 }
 
 // BlockCipher implements TLS block cipher, used by TLS 1.1 and 1.2.
@@ -195,7 +207,7 @@ func (c *BlockCipher) Open(buffer []byte, size int) ([]byte, error) {
 	fmt.Printf("Padding removed size: %d\n", size)
 	size = removeIV(buffer, size, ivSize)
 	fmt.Printf("IV removed size: %d\n", size)
-	return verify(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size, ivSize)
+	return verify(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size)
 }
 
 func (c *BlockCipher) Close() {
@@ -208,6 +220,10 @@ func (c *BlockCipher) Close() {
 	if c.random != nil {
 		c.random.Close()
 	}
+}
+
+func (c *BlockCipher) RecordOffset() int {
+	return BufferHeaderSize - HeaderSize - c.cipher.BlockSize()
 }
 
 // AEADCipher implements TLS 1.2 aead cipher.
@@ -231,6 +247,10 @@ func (c *AEADCipher) Close() {
 	if c.mac != nil {
 		c.mac.Close()
 	}
+}
+
+func (c *AEADCipher) RecordOffset() int {
+	return BufferHeaderSize - HeaderSize
 }
 
 func encrypt(cipher okapi.Cipher, buffer []byte, size int, ivSize int) ([]byte, error) {
@@ -297,8 +317,8 @@ func insertIV(buffer []byte, size int, ivSize int, random Random) int {
 
 func removeIV(buffer []byte, size int, ivSize int) int {
 	// Shift record header+seq_num right over the IV.
-	var record = buffer[BufferHeaderSize-HeaderSize-8:]
-	copy(record[ivSize:][:HeaderSize+8], record)
+	var record = buffer[BufferHeaderSize-HeaderSize-ivSize-8:]
+	copy(record[ivSize:], record[:HeaderSize+8])
 	return size - ivSize
 }
 
@@ -320,10 +340,10 @@ func sign(mac okapi.Hash, buffer []byte, size int) int {
 	return size
 }
 
-func verify(mac okapi.Hash, buffer []byte, size int, ivSize int) ([]byte, error) {
+func verify(mac okapi.Hash, buffer []byte, size int) ([]byte, error) {
 	//fmt.Printf("Signed: %q\n", buffer[:HeaderSize+8+size])
 	if mac == nil {
-		return buffer[8+HeaderSize+ivSize:][:size], nil
+		return buffer[8+HeaderSize:][:size], nil
 	}
 	size -= mac.Size()
 	// Adjust the length field in the header to exclude the record digest,
@@ -332,8 +352,8 @@ func verify(mac okapi.Hash, buffer []byte, size int, ivSize int) ([]byte, error)
 	binary.BigEndian.PutUint16(lengthHeader, uint16(size))
 	// Hash whole buffer (including the seq_num and record header),
 	// but excluding the explicit IV room at the beginning.
-	mac.Write(buffer[ivSize : 8+HeaderSize+size])
-	buffer = buffer[8+HeaderSize+ivSize:]
+	mac.Write(buffer[:8+HeaderSize+size])
+	buffer = buffer[8+HeaderSize:]
 	// Check that the computed digest matches the received digest.
 	ok := subtle.ConstantTimeCompare(buffer[size:][:mac.Size()], mac.Digest()) == 1
 	mac.Reset()

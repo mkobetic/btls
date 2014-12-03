@@ -9,7 +9,7 @@ import (
 type Reader struct {
 	reader      io.Reader       // source of TLS records
 	buffer      []byte          // holds the entire TLS record with seq_num prepended
-	record      []byte          // frames the entire TLS record (including the header)
+	record      []byte          // frames the entire TLS record (including the header and explicit IV)
 	unread      []byte          // frames the unread part of the payload
 	cipher      Cipher          // opens incoming sealed record
 	seqNum      uint64          // current record number
@@ -32,7 +32,6 @@ func NewReader(reader io.Reader, buffer []byte) *Reader {
 		return nil
 	}
 	r := &Reader{reader: reader, buffer: buffer, ContentType: Handshake}
-	r.record = buffer[BufferHeaderSize-HeaderSize:] // first 8 bytes are seq_num
 	r.SetCipher(NULL_NULL, SSL30, nil, nil, nil)
 	return r
 }
@@ -78,7 +77,7 @@ func (r *Reader) readRecord() error {
 	}
 	_assert(m == length, "incomplete record read %d, expected %d", m, length)
 
-	binary.BigEndian.PutUint64(r.buffer[BufferHeaderSize-HeaderSize-8:][:8], r.seqNum)
+	binary.BigEndian.PutUint64(r.buffer[r.cipher.RecordOffset()-8:][:8], r.seqNum)
 	r.seqNum += 1
 	if r.seqNum == 0xFFFFFFFFFFFFFFFF {
 		return RecordSequenceNumberOverflow
@@ -101,6 +100,7 @@ func (r *Reader) Close() error {
 // Subsequent Reads will process new records using the new parameters.
 func (r *Reader) SetCipher(cs CipherSpec, v ProtocolVersion, key, iv, macKey []byte) error {
 	r.cipher = cs.New(v, key, iv, macKey, false, nil)
+	r.record = r.buffer[r.cipher.RecordOffset():]
 	return nil
 }
 

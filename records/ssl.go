@@ -3,6 +3,7 @@ package records
 import (
 	"crypto/subtle"
 	"encoding/binary"
+
 	"github.com/mkobetic/okapi"
 )
 
@@ -31,6 +32,10 @@ func (c *SSL30StreamCipher) Close() {
 	}
 }
 
+func (c *SSL30StreamCipher) RecordOffset() int {
+	return BufferHeaderSize - HeaderSize
+}
+
 // SSL3.0 uses custom MAC and implicit IVs.
 type SSL30BlockCipher struct {
 	cipher okapi.Cipher
@@ -56,6 +61,10 @@ func (c *SSL30BlockCipher) Close() {
 	if c.mac != nil {
 		c.mac.Close()
 	}
+}
+
+func (c *SSL30BlockCipher) RecordOffset() int {
+	return BufferHeaderSize - HeaderSize
 }
 
 func addPaddingSSL30(cipher okapi.Cipher, buffer []byte, size int) int {
