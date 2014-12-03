@@ -14,16 +14,16 @@ var digestSize = map[okapi.HashSpec]int{
 	okapi.SHA256: 32,
 }
 
-func TestCipher_NULL_NULL(t *testing.T)          { testCipher(t, NULL_NULL, TLS10) }
-func TestCipher_NULL_MD5(t *testing.T)           { testCipher(t, NULL_MD5, TLS11) }
-func TestCipher_NULL_SHA256(t *testing.T)        { testCipher(t, NULL_SHA256, TLS12) }
-func TestCipher_NULL_SHA(t *testing.T)           { testCipher(t, NULL_SHA, SSL30) }
-func TestCipher_RC4_128_SHA(t *testing.T)        { testCipher(t, RC4_128_SHA, SSL30) }
-func TestCipher_RC4_128_MD5(t *testing.T)        { testCipher(t, RC4_128_MD5, TLS10) }
-func TestCipher_3DES_EDE_CBC_SHA(t *testing.T)   { testCipher(t, DES_EDE_CBC_SHA, SSL30) }
-func TestCipher_AES_128_CBC_SHA(t *testing.T)    { testCipher(t, AES_128_CBC_SHA, TLS10) }
-func TestCipher_AES_256_CBC_SHA(t *testing.T)    { testCipher(t, AES_128_CBC_SHA, TLS11) }
-func TestCipher_AES_256_CBC_SHA256(t *testing.T) { testCipher(t, AES_256_CBC_SHA256, TLS12) }
+func TestCipher_NULL_NULL(t *testing.T)              { testCipher(t, NULL_NULL, TLS10) }
+func TestCipher_NULL_MD5(t *testing.T)               { testCipher(t, NULL_MD5, TLS11) }
+func TestCipher_NULL_SHA256(t *testing.T)            { testCipher(t, NULL_SHA256, TLS12) }
+func TestCipher_NULL_SHA(t *testing.T)               { testCipher(t, NULL_SHA, SSL30) }
+func TestCipher_RC4_128_SHA(t *testing.T)            { testCipher(t, RC4_128_SHA, SSL30) }
+func TestCipher_RC4_128_MD5(t *testing.T)            { testCipher(t, RC4_128_MD5, TLS10) }
+func TestCipher_3DES_EDE_CBC_SHA(t *testing.T)       { testCipher(t, DES_EDE_CBC_SHA, SSL30) }
+func TestCipher_AES_128_CBC_SHA(t *testing.T)        { testCipher(t, AES_128_CBC_SHA, TLS10) }
+func TestCipher_3DES_EDE_CBC_SHA_TLS11(t *testing.T) { testCipher(t, DES_EDE_CBC_SHA, TLS11) }
+func TestCipher_AES_256_CBC_SHA256(t *testing.T)     { testCipher(t, AES_256_CBC_SHA256, TLS12) }
 func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	var key, iv, macKey []byte
 	if cs.Cipher != nil {
@@ -92,7 +92,6 @@ func Test_InsertIV(t *testing.T) {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
 	}
-	t.Logf("Prefix ends at %d", i)
 	// Check the shifted header
 	for ; i < BufferHeaderSize-ivSize-2; i++ {
 		if buffer[i] != byte(i+ivSize) {
