@@ -50,7 +50,7 @@ func (c *SSL30BlockCipher) Seal(buffer []byte, size int) ([]byte, error) {
 
 func (c *SSL30BlockCipher) Open(buffer []byte, size int) ([]byte, error) {
 	decrypt(c.cipher, buffer, size, 0)
-	size = removePadding(c.cipher, buffer, size)
+	size = removePadding(c.cipher, buffer, size, 0)
 	return verifySSL30(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size)
 }
 

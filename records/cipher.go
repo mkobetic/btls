@@ -158,7 +158,7 @@ func (c *TLS10BlockCipher) Seal(buffer []byte, size int) ([]byte, error) {
 
 func (c *TLS10BlockCipher) Open(buffer []byte, size int) ([]byte, error) {
 	decrypt(c.cipher, buffer, size, 0)
-	size = removePadding(c.cipher, buffer, size)
+	size = removePadding(c.cipher, buffer, size, 0)
 	return verify(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size)
 }
 
@@ -203,7 +203,7 @@ func (c *BlockCipher) Open(buffer []byte, size int) ([]byte, error) {
 	fmt.Printf("Open size: %d\n", size)
 	decrypt(c.cipher, buffer, size, ivSize)
 	//fmt.Printf("Decrypted: %q\n", buffer[BufferHeaderSize:][:size])
-	size = removePadding(c.cipher, buffer, size)
+	size = removePadding(c.cipher, buffer, size, ivSize)
 	fmt.Printf("Padding removed size: %d\n", size)
 	size = removeIV(buffer, size, ivSize)
 	fmt.Printf("IV removed size: %d\n", size)
@@ -294,8 +294,9 @@ func addPadding(cipher okapi.Cipher, buffer []byte, size int, ivSize int, random
 	return size
 }
 
-func removePadding(cipher okapi.Cipher, buffer []byte, size int) int {
+func removePadding(cipher okapi.Cipher, buffer []byte, size int, ivSize int) int {
 	var pad = int(buffer[BufferHeaderSize+size-1])
+	fmt.Printf("removing padding size %d, ivSize %d, pad %d\n", size, ivSize, pad)
 	return size - 1 - pad
 }
 

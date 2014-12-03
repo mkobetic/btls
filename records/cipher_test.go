@@ -22,12 +22,13 @@ func TestCipher_RC4_128_SHA(t *testing.T)        { testCipher(t, RC4_128_SHA, SS
 func TestCipher_RC4_128_MD5(t *testing.T)        { testCipher(t, RC4_128_MD5, TLS10) }
 func TestCipher_3DES_EDE_CBC_SHA(t *testing.T)   { testCipher(t, DES_EDE_CBC_SHA, SSL30) }
 func TestCipher_AES_128_CBC_SHA(t *testing.T)    { testCipher(t, AES_128_CBC_SHA, TLS10) }
+func TestCipher_AES_256_CBC_SHA(t *testing.T)    { testCipher(t, AES_128_CBC_SHA, TLS11) }
 func TestCipher_AES_256_CBC_SHA256(t *testing.T) { testCipher(t, AES_256_CBC_SHA256, TLS12) }
 func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	var key, iv, macKey []byte
 	if cs.Cipher != nil {
 		key = bytes.Repeat([]byte{42}, cs.CipherKeySize)
-		if cs.kind == block {
+		if cs.kind == block && v < TLS11 {
 			iv = bytes.Repeat([]byte{42}, cs.CipherBlockSize)
 		}
 	}
@@ -44,9 +45,18 @@ func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	if err != nil {
 		t.Fatalf("Seal error: %s", err)
 	}
-	if !((cs.kind == stream && len(sealed) == HeaderSize+len(msg)+digestSize[cs.MAC]) ||
-		(cs.kind == block && len(sealed) > HeaderSize+len(msg)+digestSize[cs.MAC])) {
-		t.Fatalf("Wrong Seal output size: %d", len(sealed))
+	var expected int
+	if cs.kind == stream {
+		expected = HeaderSize + len(msg) + digestSize[cs.MAC]
+	} else {
+		expected = len(msg) + digestSize[cs.MAC]
+		if v > TLS10 {
+			expected += cs.CipherBlockSize
+		}
+		expected = (expected/cs.CipherBlockSize+1)*cs.CipherBlockSize + HeaderSize
+	}
+	if len(sealed) != expected {
+		t.Fatalf("Wrong Seal output size %d, expected %d", len(sealed), expected)
 	}
 	if cs.Cipher != nil && bytes.Equal(payload, msg) {
 		t.Fatalf("Payload not encrypted %s", payload)

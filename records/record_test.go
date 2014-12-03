@@ -14,6 +14,9 @@ func Test_RW_RC4_128_SHA(t *testing.T) { testReadWrite(t, 16384, 1024, RC4_128_S
 
 func Test_RW_3DES_EDE_CBC_SHA(t *testing.T) { testReadWrite(t, 16384, 1024, DES_EDE_CBC_SHA, SSL30) }
 func Test_RW_AES_128_CBC_SHA(t *testing.T)  { testReadWrite(t, 16384, 1024, AES_128_CBC_SHA, TLS10) }
+func Test_RW_AES_256_CBC_SHA(t *testing.T) {
+	testReadWrite(t, 16384, 1024, AES_256_CBC_SHA256, TLS11)
+}
 func Test_RW_AES_256_CBC_SHA256(t *testing.T) {
 	testReadWrite(t, 16384, 1024, AES_256_CBC_SHA256, TLS12)
 }
@@ -21,7 +24,7 @@ func testReadWrite(t *testing.T, payloadSize int, recordSize int, cs *OkapiCiphe
 	var key, iv, macKey []byte
 	if cs.Cipher != nil {
 		key = bytes.Repeat([]byte{42}, cs.CipherKeySize)
-		if cs.kind == block {
+		if cs.kind == block && v < TLS11 {
 			iv = bytes.Repeat([]byte{42}, cs.CipherBlockSize)
 		}
 	}
@@ -29,7 +32,7 @@ func testReadWrite(t *testing.T, payloadSize int, recordSize int, cs *OkapiCiphe
 		macKey = bytes.Repeat([]byte{42}, cs.MACKeySize)
 	}
 	buffer := new(bytes.Buffer)
-	w := NewWriter(buffer, make([]byte, recordSize+MinBufferTrailerSize))
+	w := NewWriter(buffer, make([]byte, BufferHeaderSize+recordSize+MinBufferTrailerSize))
 	w.SetCipher(cs, v, key, iv, macKey, nil)
 	r := NewReader(buffer, nil)
 	r.SetCipher(cs, v, key, iv, macKey)
