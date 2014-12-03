@@ -17,7 +17,7 @@ func Test_RW_AES_128_CBC_SHA(t *testing.T)  { testReadWrite(t, 16384, 1024, AES_
 func Test_RW_AES_256_CBC_SHA256(t *testing.T) {
 	testReadWrite(t, 16384, 1024, AES_256_CBC_SHA256, TLS12)
 }
-func testReadWrite(t *testing.T, payloadSize int, recordSize int, cs *CipherSpec, v ProtocolVersion) {
+func testReadWrite(t *testing.T, payloadSize int, recordSize int, cs *OkapiCipherSpec, v ProtocolVersion) {
 	var key, iv, macKey []byte
 	if cs.Cipher != nil {
 		key = bytes.Repeat([]byte{42}, cs.CipherKeySize)

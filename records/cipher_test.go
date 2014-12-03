@@ -2,8 +2,9 @@ package records
 
 import (
 	"bytes"
-	"github.com/mkobetic/okapi"
 	"testing"
+
+	"github.com/mkobetic/okapi"
 )
 
 var digestSize = map[okapi.HashSpec]int{
@@ -22,7 +23,7 @@ func TestCipher_RC4_128_MD5(t *testing.T)        { testCipher(t, RC4_128_MD5, TL
 func TestCipher_3DES_EDE_CBC_SHA(t *testing.T)   { testCipher(t, DES_EDE_CBC_SHA, SSL30) }
 func TestCipher_AES_128_CBC_SHA(t *testing.T)    { testCipher(t, AES_128_CBC_SHA, TLS10) }
 func TestCipher_AES_256_CBC_SHA256(t *testing.T) { testCipher(t, AES_256_CBC_SHA256, TLS12) }
-func testCipher(t *testing.T, cs *CipherSpec, v ProtocolVersion) {
+func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	var key, iv, macKey []byte
 	if cs.Cipher != nil {
 		key = bytes.Repeat([]byte{42}, cs.CipherKeySize)
@@ -39,27 +40,69 @@ func testCipher(t *testing.T, cs *CipherSpec, v ProtocolVersion) {
 	buffer := make([]byte, BufferHeaderSize+len(msg)+MinBufferTrailerSize)
 	payload := buffer[BufferHeaderSize:][:len(msg)]
 	copy(payload, msg)
-	size, err := suite.Seal(buffer, len(msg))
+	sealed, err := suite.Seal(buffer, len(msg))
 	if err != nil {
 		t.Fatalf("Seal error: %s", err)
 	}
-	if !((cs.kind == stream && size == len(msg)+digestSize[cs.MAC]) ||
-		(cs.kind == block && size > len(msg)+digestSize[cs.MAC])) {
-		t.Fatalf("Wrong Seal output size: %d", size)
+	if !((cs.kind == stream && len(sealed) == HeaderSize+len(msg)+digestSize[cs.MAC]) ||
+		(cs.kind == block && len(sealed) > HeaderSize+len(msg)+digestSize[cs.MAC])) {
+		t.Fatalf("Wrong Seal output size: %d", len(sealed))
 	}
 	if cs.Cipher != nil && bytes.Equal(payload, msg) {
 		t.Fatalf("Payload not encrypted %s", payload)
 	}
 	suite = cs.New(v, key, iv, macKey, false, nil)
 	defer suite.Close()
-	size, err = suite.Open(buffer, size)
+	unsealed, err := suite.Open(buffer, len(sealed)-HeaderSize)
 	if err != nil {
 		t.Fatalf("Open error: %s", err)
 	}
-	if size != len(msg) {
-		t.Fatalf("Wrong Open output size: %d", size)
+	if len(unsealed) != len(msg) {
+		t.Fatalf("Wrong Open output size: %d", len(unsealed))
 	}
 	if !bytes.Equal(payload, msg) {
 		t.Fatalf("%s", payload)
 	}
 }
+
+func Test_ExplicitIV(t *testing.T) {
+	buffer := make([]byte, BufferHeaderSize+50)
+	for i := 0; i < len(buffer); i++ {
+		buffer[i] = byte(i)
+	}
+	ivSize := 10
+	length := insertIV(buffer, 20, ivSize, &FakeRandom{})
+	if length != 30 {
+		t.Fatalf("Wrong length after insertion: %d", length)
+	}
+	for i := 0; i < BufferHeaderSize-HeaderSize-ivSize; i++ {
+		if buffer[i] != byte(i) {
+			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+		}
+	}
+	for i := BufferHeaderSize - HeaderSize - ivSize; i < BufferHeaderSize-HeaderSize; i++ {
+		if buffer[i] != byte(i+ivSize) {
+			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+		}
+	}
+	for i := BufferHeaderSize - HeaderSize; i < BufferHeaderSize; i++ {
+		if buffer[i] != 255 {
+			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+		}
+	}
+	for i := BufferHeaderSize; i < len(buffer); i++ {
+		if buffer[i] != byte(i) {
+			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+		}
+	}
+
+}
+
+type FakeRandom struct{}
+
+func (f *FakeRandom) Read(s []byte) (int, error) {
+	for i := 0; i < len(s); i++ {
+	}
+	return len(s), nil
+}
+func (f *FakeRandom) Close() {}
