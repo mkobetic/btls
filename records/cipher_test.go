@@ -75,7 +75,7 @@ func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	}
 }
 
-func Test_ExplicitIV(t *testing.T) {
+func Test_InsertIV(t *testing.T) {
 	buffer := make([]byte, BufferHeaderSize+50)
 	for i := 0; i < len(buffer); i++ {
 		buffer[i] = byte(i)
@@ -120,50 +120,37 @@ func Test_ExplicitIV(t *testing.T) {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
 	}
-	//length := removeIV(buffer, length, ivSize)
-	//if length != 20 {
-	//	t.Fatalf("Wrong length after removal: %d", length)
-	//}
-	//i = 0
-	//// Check the unmodified prefix
-	//for ; i < BufferHeaderSize-HeaderSize-ivSize; i++ {
-	//	if buffer[i] != byte(i) {
-	//		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
-	//	}
-	//}
-	//// Check the shifted sequence number
-	//for ; i < BufferHeaderSize-HeaderSize-ivSize+8; i++ {
-	//	if buffer[i] != byte(i-8) {
-	//		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
-	//	}
-	//}
-	//// Check the shifted header
-	//for ; i < BufferHeaderSize-ivSize-2; i++ {
-	//	if buffer[i] != byte(i+ivSize) {
-	//		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
-	//	}
-	//}
-	//// Check the length field
-	//if buffer[i] != 0 {
-	//	t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
-	//}
-	//i++
-	//if buffer[i] != byte(length) {
-	//	t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
-	//}
-	//i++
-	//// Check the inserted IV
-	//for ; i < BufferHeaderSize; i++ {
-	//	if buffer[i] != 255 {
-	//		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
-	//	}
-	//}
-	//// Check the record contents
-	//for ; i < len(buffer); i++ {
-	//	if buffer[i] != byte(i) {
-	//		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
-	//	}
-	//}
+}
+
+func Test_RemoveIV(t *testing.T) {
+	buffer := make([]byte, BufferHeaderSize+50)
+	for i := 0; i < len(buffer); i++ {
+		buffer[i] = byte(i)
+	}
+	ivSize := 10
+	length := removeIV(buffer, 30, ivSize)
+	if length != 20 {
+		t.Fatalf("Wrong length after removal: %d", length)
+	}
+	i := 0
+	// Check the unmodified prefix
+	for ; i < BufferHeaderSize-HeaderSize-8; i++ {
+		if buffer[i] != byte(i) {
+			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+		}
+	}
+	// Check the shifted sequence number and header
+	for ; i < BufferHeaderSize; i++ {
+		if buffer[i] != byte(i-ivSize) {
+			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+		}
+	}
+	// Check the record contents
+	for ; i < len(buffer); i++ {
+		if buffer[i] != byte(i) {
+			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+		}
+	}
 }
 
 type FakeRandom struct{}
