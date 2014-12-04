@@ -77,7 +77,7 @@ func (r *Reader) readRecord() error {
 	}
 	_assert(m == length, "incomplete record read %d, expected %d", m, length)
 
-	binary.BigEndian.PutUint64(r.buffer[r.cipher.RecordOffset()-8:][:8], r.seqNum)
+	binary.BigEndian.PutUint64(r.buffer[r.cipher.SealedRecordOffset()-8:][:8], r.seqNum)
 	r.seqNum += 1
 	if r.seqNum == 0xFFFFFFFFFFFFFFFF {
 		return RecordSequenceNumberOverflow
@@ -100,7 +100,7 @@ func (r *Reader) Close() error {
 // Subsequent Reads will process new records using the new parameters.
 func (r *Reader) SetCipher(cs CipherSpec, v ProtocolVersion, key, iv, macKey []byte) error {
 	r.cipher = cs.New(v, key, iv, macKey, false, nil)
-	r.record = r.buffer[r.cipher.RecordOffset():]
+	r.record = r.buffer[r.cipher.SealedRecordOffset():]
 	return nil
 }
 

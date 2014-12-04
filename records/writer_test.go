@@ -29,7 +29,7 @@ func TestWriter_Basic(t *testing.T) {
 
 func TestWriter_AutoFlushing(t *testing.T) {
 	b := bytes.NewBuffer(nil)
-	w := NewWriter(b, make([]byte, BufferHeaderSize+2+MinBufferTrailerSize))
+	w := NewWriter(b, make([]byte, PayloadOffset+2+MinBufferTrailerSize))
 	c, err := w.Write(h2b("facade"))
 	assert.Nil(t, err)
 	assert.Equal(t, 3, c)

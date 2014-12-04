@@ -34,7 +34,7 @@ func NewWriter(writer io.Writer, buffer []byte) *Writer {
 		buffer = buffer[:MaxBufferSize]
 	}
 	w := &Writer{writer: writer, buffer: buffer}
-	w.record = buffer[BufferHeaderSize-HeaderSize:] // first 8 bytes are seq_num
+	w.record = buffer[PayloadOffset-HeaderSize:] // first 8 bytes are seq_num
 	content := w.record[HeaderSize : HeaderSize+w.maxPlaintextLength()]
 	w.content = content
 	w.free = content
@@ -68,7 +68,7 @@ func (w *Writer) Write(b []byte) (int, error) {
 
 // Flush emits a record with entire buffered content into the underlying writer.
 func (w *Writer) Flush() (err error) {
-	binary.BigEndian.PutUint64(w.buffer[BufferHeaderSize-HeaderSize-8:][:8], w.seqNum)
+	binary.BigEndian.PutUint64(w.buffer[PayloadOffset-HeaderSize-8:][:8], w.seqNum)
 	w.seqNum += 1
 	if w.seqNum == 0xFFFFFFFFFFFFFFFF {
 		return RecordSequenceNumberOverflow

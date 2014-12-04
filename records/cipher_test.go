@@ -38,8 +38,8 @@ func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	suite := cs.New(v, key, iv, macKey, true, &FakeRandom{})
 	defer suite.Close()
 	msg := []byte("Hello World!")
-	buffer := make([]byte, BufferHeaderSize+len(msg)+MinBufferTrailerSize)
-	payload := buffer[BufferHeaderSize:][:len(msg)]
+	buffer := make([]byte, PayloadOffset+len(msg)+MinBufferTrailerSize)
+	payload := buffer[PayloadOffset:][:len(msg)]
 	copy(payload, msg)
 	sealed, err := suite.Seal(buffer, len(msg))
 	if err != nil {
@@ -64,8 +64,8 @@ func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	suite = cs.New(v, key, iv, macKey, false, &FakeRandom{})
 	defer suite.Close()
 	buffer = make([]byte, len(buffer))
-	copy(buffer[suite.RecordOffset():], sealed)
-	if !bytes.Equal(sealed, buffer[suite.RecordOffset():][:len(sealed)]) {
+	copy(buffer[suite.SealedRecordOffset():], sealed)
+	if !bytes.Equal(sealed, buffer[suite.SealedRecordOffset():][:len(sealed)]) {
 		t.Fatal("WTF!")
 	}
 	unsealed, err := suite.Open(buffer, len(sealed)-HeaderSize)
@@ -81,7 +81,7 @@ func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 }
 
 func Test_InsertIV(t *testing.T) {
-	buffer := make([]byte, BufferHeaderSize+50)
+	buffer := make([]byte, PayloadOffset+50)
 	for i := 0; i < len(buffer); i++ {
 		buffer[i] = byte(i)
 	}
@@ -92,13 +92,13 @@ func Test_InsertIV(t *testing.T) {
 	}
 	i := 0
 	// Check the unmodified prefix
-	for ; i < BufferHeaderSize-HeaderSize-ivSize; i++ {
+	for ; i < PayloadOffset-HeaderSize-ivSize; i++ {
 		if buffer[i] != byte(i) {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
 	}
 	// Check the shifted header
-	for ; i < BufferHeaderSize-ivSize-2; i++ {
+	for ; i < PayloadOffset-ivSize-2; i++ {
 		if buffer[i] != byte(i+ivSize) {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
@@ -113,7 +113,7 @@ func Test_InsertIV(t *testing.T) {
 	}
 	i++
 	// Check the inserted IV
-	for ; i < BufferHeaderSize; i++ {
+	for ; i < PayloadOffset; i++ {
 		if buffer[i] != 255 {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
@@ -127,7 +127,7 @@ func Test_InsertIV(t *testing.T) {
 }
 
 func Test_RemoveIV(t *testing.T) {
-	buffer := make([]byte, BufferHeaderSize+50)
+	buffer := make([]byte, PayloadOffset+50)
 	for i := 0; i < len(buffer); i++ {
 		buffer[i] = byte(i)
 	}
@@ -138,13 +138,13 @@ func Test_RemoveIV(t *testing.T) {
 	}
 	i := 0
 	// Check the unmodified prefix
-	for ; i < BufferHeaderSize-HeaderSize-8; i++ {
+	for ; i < PayloadOffset-HeaderSize-8; i++ {
 		if buffer[i] != byte(i) {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
 	}
 	// Check the shifted sequence number and header
-	for ; i < BufferHeaderSize-HeaderSize+3; i++ {
+	for ; i < PayloadOffset-HeaderSize+3; i++ {
 		if buffer[i] != byte(i-ivSize) {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}

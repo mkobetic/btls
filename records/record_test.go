@@ -32,7 +32,7 @@ func testReadWrite(t *testing.T, payloadSize int, recordSize int, cs *OkapiCiphe
 		macKey = bytes.Repeat([]byte{42}, cs.MACKeySize)
 	}
 	buffer := new(bytes.Buffer)
-	w := NewWriter(buffer, make([]byte, BufferHeaderSize+recordSize+MinBufferTrailerSize))
+	w := NewWriter(buffer, make([]byte, PayloadOffset+recordSize+MinBufferTrailerSize))
 	w.SetCipher(cs, v, key, iv, macKey, nil)
 	r := NewReader(buffer, nil)
 	r.SetCipher(cs, v, key, iv, macKey)

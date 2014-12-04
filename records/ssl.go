@@ -32,8 +32,8 @@ func (c *SSL30StreamCipher) Close() {
 	}
 }
 
-func (c *SSL30StreamCipher) RecordOffset() int {
-	return BufferHeaderSize - HeaderSize
+func (c *SSL30StreamCipher) SealedRecordOffset() int {
+	return PayloadOffset - HeaderSize
 }
 
 // SSL3.0 uses custom MAC and implicit IVs.
@@ -63,26 +63,26 @@ func (c *SSL30BlockCipher) Close() {
 	}
 }
 
-func (c *SSL30BlockCipher) RecordOffset() int {
-	return BufferHeaderSize - HeaderSize
+func (c *SSL30BlockCipher) SealedRecordOffset() int {
+	return PayloadOffset - HeaderSize
 }
 
 func addPaddingSSL30(cipher okapi.Cipher, buffer []byte, size int) int {
 	var pad = byte(cipher.BlockSize())
 	pad = pad - byte((size+1)%int(pad))
-	padField := buffer[BufferHeaderSize+size:]
+	padField := buffer[PayloadOffset+size:]
 	for i := byte(0); i <= pad; i++ {
 		padField[i] = pad
 	}
 	size += int(pad) + 1
 	// Update the length field in the record header to include the padding
-	var lengthField = buffer[BufferHeaderSize-HeaderSize+3 : BufferHeaderSize-HeaderSize+5]
+	var lengthField = buffer[PayloadOffset-HeaderSize+3 : PayloadOffset-HeaderSize+5]
 	binary.BigEndian.PutUint16(lengthField, uint16(size))
 	return size
 }
 
 func signSSL30(mac okapi.Hash, buffer []byte, size int) int {
-	buffer = buffer[BufferHeaderSize-HeaderSize-8:]
+	buffer = buffer[PayloadOffset-HeaderSize-8:]
 	// Update the length field in the header with the data size.
 	lengthHeader := buffer[8+3:][:2]
 	binary.BigEndian.PutUint16(lengthHeader, uint16(size))
@@ -108,15 +108,15 @@ func signSSL30(mac okapi.Hash, buffer []byte, size int) int {
 
 func verifySSL30(mac okapi.Hash, buffer []byte, size int) ([]byte, error) {
 	if mac == nil {
-		return buffer[BufferHeaderSize:][:size], nil
+		return buffer[PayloadOffset:][:size], nil
 	}
 	size -= mac.Size()
 	// Adjust the length field in the header to exclude the record digest,
 	// so that we can feed the buffer directly into to the MAC function.
-	lengthHeader := buffer[BufferHeaderSize-HeaderSize+3:][:2]
+	lengthHeader := buffer[PayloadOffset-HeaderSize+3:][:2]
 	binary.BigEndian.PutUint16(lengthHeader, uint16(size))
 	// shift seq_num + type 2 bytes right over version
-	buffer = buffer[BufferHeaderSize-HeaderSize-8:]
+	buffer = buffer[PayloadOffset-HeaderSize-8:]
 	var header = buffer[:8+3]
 	copy(header[2:], header)
 	//mac.Write(buffer[MaxBlockSize : BufferHeaderSize-4])          // seq_num + type +
