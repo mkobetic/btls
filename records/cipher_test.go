@@ -14,16 +14,16 @@ var digestSize = map[okapi.HashSpec]int{
 	okapi.SHA256: 32,
 }
 
-func TestCipher_NULL_NULL(t *testing.T)              { testCipher(t, NULL_NULL, TLS10) }
-func TestCipher_NULL_MD5(t *testing.T)               { testCipher(t, NULL_MD5, TLS11) }
-func TestCipher_NULL_SHA256(t *testing.T)            { testCipher(t, NULL_SHA256, TLS12) }
-func TestCipher_NULL_SHA(t *testing.T)               { testCipher(t, NULL_SHA, SSL30) }
-func TestCipher_RC4_128_SHA(t *testing.T)            { testCipher(t, RC4_128_SHA, SSL30) }
-func TestCipher_RC4_128_MD5(t *testing.T)            { testCipher(t, RC4_128_MD5, TLS10) }
-func TestCipher_3DES_EDE_CBC_SHA(t *testing.T)       { testCipher(t, DES_EDE_CBC_SHA, SSL30) }
-func TestCipher_AES_128_CBC_SHA(t *testing.T)        { testCipher(t, AES_128_CBC_SHA, TLS10) }
-func TestCipher_3DES_EDE_CBC_SHA_TLS11(t *testing.T) { testCipher(t, DES_EDE_CBC_SHA, TLS11) }
-func TestCipher_AES_256_CBC_SHA256(t *testing.T)     { testCipher(t, AES_256_CBC_SHA256, TLS12) }
+func TestCipher_NULL_NULL_TLS10(t *testing.T)          { testCipher(t, NULL_NULL, TLS10) }
+func TestCipher_NULL_MD5_TLS11(t *testing.T)           { testCipher(t, NULL_MD5, TLS11) }
+func TestCipher_NULL_SHA256_TLS12(t *testing.T)        { testCipher(t, NULL_SHA256, TLS12) }
+func TestCipher_NULL_SHA_SSL30(t *testing.T)           { testCipher(t, NULL_SHA, SSL30) }
+func TestCipher_RC4_128_SHA_SSL30(t *testing.T)        { testCipher(t, RC4_128_SHA, SSL30) }
+func TestCipher_RC4_128_MD5_TLS10(t *testing.T)        { testCipher(t, RC4_128_MD5, TLS10) }
+func TestCipher_3DES_EDE_CBC_SHA_SSL30(t *testing.T)   { testCipher(t, DES_EDE_CBC_SHA, SSL30) }
+func TestCipher_AES_128_CBC_SHA_TLS10(t *testing.T)    { testCipher(t, AES_128_CBC_SHA, TLS10) }
+func TestCipher_3DES_EDE_CBC_SHA_TLS11(t *testing.T)   { testCipher(t, DES_EDE_CBC_SHA, TLS11) }
+func TestCipher_AES_256_CBC_SHA256_TLS12(t *testing.T) { testCipher(t, AES_256_CBC_SHA256, TLS12) }
 func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	var key, iv, macKey []byte
 	if cs.Cipher != nil {
@@ -35,7 +35,7 @@ func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	if cs.MAC != nil {
 		macKey = bytes.Repeat([]byte{42}, cs.MACKeySize)
 	}
-	suite := cs.New(v, key, iv, macKey, true, nil)
+	suite := cs.New(v, key, iv, macKey, true, &FakeRandom{})
 	defer suite.Close()
 	msg := []byte("Hello World!")
 	buffer := make([]byte, BufferHeaderSize+len(msg)+MinBufferTrailerSize)
@@ -61,8 +61,13 @@ func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	if cs.Cipher != nil && bytes.Equal(payload, msg) {
 		t.Fatalf("Payload not encrypted %s", payload)
 	}
-	suite = cs.New(v, key, iv, macKey, false, nil)
+	suite = cs.New(v, key, iv, macKey, false, &FakeRandom{})
 	defer suite.Close()
+	buffer = make([]byte, len(buffer))
+	copy(buffer[suite.RecordOffset():], sealed)
+	if !bytes.Equal(sealed, buffer[suite.RecordOffset():][:len(sealed)]) {
+		t.Fatal("WTF!")
+	}
 	unsealed, err := suite.Open(buffer, len(sealed)-HeaderSize)
 	if err != nil {
 		t.Fatalf("Open error: %s", err)
@@ -70,7 +75,7 @@ func testCipher(t *testing.T, cs *OkapiCipherSpec, v ProtocolVersion) {
 	if len(unsealed) != len(msg) {
 		t.Fatalf("Wrong Open output size: %d", len(unsealed))
 	}
-	if !bytes.Equal(payload, msg) {
+	if !bytes.Equal(unsealed, msg) {
 		t.Fatalf("%s", payload)
 	}
 }
@@ -139,11 +144,20 @@ func Test_RemoveIV(t *testing.T) {
 		}
 	}
 	// Check the shifted sequence number and header
-	for ; i < BufferHeaderSize; i++ {
+	for ; i < BufferHeaderSize-HeaderSize+3; i++ {
 		if buffer[i] != byte(i-ivSize) {
 			t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
 		}
 	}
+	// Check the length field
+	if buffer[i] != 0 {
+		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	}
+	i++
+	if buffer[i] != byte(length) {
+		t.Fatalf("Wrong value at index %d: %d", i, buffer[i])
+	}
+	i++
 	// Check the record contents
 	for ; i < len(buffer); i++ {
 		if buffer[i] != byte(i) {

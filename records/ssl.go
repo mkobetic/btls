@@ -20,7 +20,7 @@ func (c *SSL30StreamCipher) Seal(buffer []byte, size int) ([]byte, error) {
 
 func (c *SSL30StreamCipher) Open(buffer []byte, size int) ([]byte, error) {
 	decrypt(c.cipher, buffer, size, 0)
-	return verifySSL30(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size)
+	return verifySSL30(c.mac, buffer, size)
 }
 
 func (c *SSL30StreamCipher) Close() {
@@ -51,7 +51,7 @@ func (c *SSL30BlockCipher) Seal(buffer []byte, size int) ([]byte, error) {
 func (c *SSL30BlockCipher) Open(buffer []byte, size int) ([]byte, error) {
 	decrypt(c.cipher, buffer, size, 0)
 	size = removePadding(c.cipher, buffer, size, 0)
-	return verifySSL30(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size)
+	return verifySSL30(c.mac, buffer, size)
 }
 
 func (c *SSL30BlockCipher) Close() {
@@ -108,14 +108,15 @@ func signSSL30(mac okapi.Hash, buffer []byte, size int) int {
 
 func verifySSL30(mac okapi.Hash, buffer []byte, size int) ([]byte, error) {
 	if mac == nil {
-		return buffer[8+HeaderSize:][:size], nil
+		return buffer[BufferHeaderSize:][:size], nil
 	}
 	size -= mac.Size()
 	// Adjust the length field in the header to exclude the record digest,
 	// so that we can feed the buffer directly into to the MAC function.
-	lengthHeader := buffer[8+3:][:2]
+	lengthHeader := buffer[BufferHeaderSize-HeaderSize+3:][:2]
 	binary.BigEndian.PutUint16(lengthHeader, uint16(size))
 	// shift seq_num + type 2 bytes right over version
+	buffer = buffer[BufferHeaderSize-HeaderSize-8:]
 	var header = buffer[:8+3]
 	copy(header[2:], header)
 	//mac.Write(buffer[MaxBlockSize : BufferHeaderSize-4])          // seq_num + type +

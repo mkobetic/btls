@@ -6,8 +6,6 @@ import (
 	"io"
 
 	"github.com/mkobetic/okapi"
-
-	"fmt"
 )
 
 // CipherKind represents different Cipher types as defined by the protocol specification.
@@ -122,7 +120,7 @@ type StreamCipher struct {
 
 func (c *StreamCipher) Open(buffer []byte, size int) ([]byte, error) {
 	decrypt(c.cipher, buffer, size, 0)
-	return verify(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size)
+	return verify(c.mac, buffer, size)
 }
 
 func (c *StreamCipher) Seal(buffer []byte, size int) ([]byte, error) {
@@ -159,7 +157,7 @@ func (c *TLS10BlockCipher) Seal(buffer []byte, size int) ([]byte, error) {
 func (c *TLS10BlockCipher) Open(buffer []byte, size int) ([]byte, error) {
 	decrypt(c.cipher, buffer, size, 0)
 	size = removePadding(c.cipher, buffer, size, 0)
-	return verify(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size)
+	return verify(c.mac, buffer, size)
 }
 
 func (c *TLS10BlockCipher) Close() {
@@ -186,28 +184,19 @@ type BlockCipher struct {
 }
 
 func (c *BlockCipher) Seal(buffer []byte, size int) ([]byte, error) {
-	fmt.Printf("Seal size: %d\n", size)
 	size = sign(c.mac, buffer, size)
-	fmt.Printf("Signed size: %d\n", size)
 	var ivSize = c.cipher.BlockSize()
 	size = insertIV(buffer, size, ivSize, c.random)
-	fmt.Printf("IV inserted size: %d\n", size)
 	size = addPadding(c.cipher, buffer, size, ivSize, c.random)
-	fmt.Printf("Padding added size: %d\n", size)
-	//fmt.Printf("Before encryption: %q\n", buffer[BufferHeaderSize:][:size])
 	return encrypt(c.cipher, buffer, size, ivSize)
 }
 
 func (c *BlockCipher) Open(buffer []byte, size int) ([]byte, error) {
 	var ivSize = c.cipher.BlockSize()
-	fmt.Printf("Open size: %d\n", size)
 	decrypt(c.cipher, buffer, size, ivSize)
-	//fmt.Printf("Decrypted: %q\n", buffer[BufferHeaderSize:][:size])
 	size = removePadding(c.cipher, buffer, size, ivSize)
-	fmt.Printf("Padding removed size: %d\n", size)
 	size = removeIV(buffer, size, ivSize)
-	fmt.Printf("IV removed size: %d\n", size)
-	return verify(c.mac, buffer[BufferHeaderSize-HeaderSize-8:], size)
+	return verify(c.mac, buffer, size)
 }
 
 func (c *BlockCipher) Close() {
@@ -255,16 +244,18 @@ func (c *AEADCipher) RecordOffset() int {
 
 func encrypt(cipher okapi.Cipher, buffer []byte, size int, ivSize int) ([]byte, error) {
 	if cipher == nil {
-		return buffer[BufferHeaderSize-HeaderSize : BufferHeaderSize+size], nil
+		// Return a slice framing the unencrypted record including the header.
+		return buffer[BufferHeaderSize-HeaderSize:][:HeaderSize+size], nil
 	}
 	// Encrypt everything after the header.
 	var fragment = buffer[BufferHeaderSize-ivSize:][:size]
 	ins, outs := cipher.Update(fragment, fragment)
 	_assert(ins == size, "cipher input size %d, expected %d", ins, size)
 	_assert(outs == size, "cipher output size %d, expected %d", outs, size)
-	// non-zero ivSize indicates that an explicit IV was inserted between the record HeaderSize
-	// and the fragment thus moving the beginning record header to the left.
-	// Note however that ivSize is also included in size.
+	// Return a slice framing the encrypted record including the header.
+	// non-zero ivSize indicates that an explicit IV was inserted between the record header
+	// and the fragment thus moving the beginning of the record to the left.
+	// Note however that size includes ivSize.
 	return buffer[BufferHeaderSize-HeaderSize-ivSize:][:HeaderSize+size], nil
 }
 
@@ -283,7 +274,7 @@ func addPadding(cipher okapi.Cipher, buffer []byte, size int, ivSize int, random
 	// TODO: Add randomized padding length
 	var pad = byte(cipher.BlockSize())
 	pad = pad - byte((size+1)%int(pad))
-	padField := buffer[BufferHeaderSize+size:]
+	padField := buffer[BufferHeaderSize-ivSize+size:]
 	for i := byte(0); i <= pad; i++ {
 		padField[i] = pad
 	}
@@ -295,9 +286,12 @@ func addPadding(cipher okapi.Cipher, buffer []byte, size int, ivSize int, random
 }
 
 func removePadding(cipher okapi.Cipher, buffer []byte, size int, ivSize int) int {
-	var pad = int(buffer[BufferHeaderSize+size-1])
-	fmt.Printf("removing padding size %d, ivSize %d, pad %d\n", size, ivSize, pad)
-	return size - 1 - pad
+	var pad = int(buffer[BufferHeaderSize-ivSize+size-1])
+	size -= 1 + int(pad)
+	// Update the length field in the record header to exclude the padding
+	var lengthField = buffer[BufferHeaderSize-HeaderSize-ivSize+3:][:2]
+	binary.BigEndian.PutUint16(lengthField, uint16(size))
+	return size
 }
 
 func insertIV(buffer []byte, size int, ivSize int, random Random) int {
@@ -305,9 +299,10 @@ func insertIV(buffer []byte, size int, ivSize int, random Random) int {
 		random = DefaultRandom // Use default Random.
 	}
 	// Shift record header left to make room for the IV.
+	// We're overwriting the seq_num but we don't need it anymore.
 	var record = buffer[BufferHeaderSize-HeaderSize-ivSize:]
 	copy(record, record[ivSize:][:HeaderSize])
-	// Generate the IV.
+	// Generate the IV into the gap between the header and the body.
 	_, err := random.Read(record[HeaderSize:][:ivSize])
 	_assert(err == nil, "IV generation failed %s", err)
 	size += ivSize
@@ -320,7 +315,10 @@ func removeIV(buffer []byte, size int, ivSize int) int {
 	// Shift record header+seq_num right over the IV.
 	var record = buffer[BufferHeaderSize-HeaderSize-ivSize-8:]
 	copy(record[ivSize:], record[:HeaderSize+8])
-	return size - ivSize
+	size -= ivSize
+	var lengthField = buffer[BufferHeaderSize-HeaderSize+3:][:2]
+	binary.BigEndian.PutUint16(lengthField, uint16(size))
+	return size
 }
 
 func sign(mac okapi.Hash, buffer []byte, size int) int {
@@ -344,22 +342,22 @@ func sign(mac okapi.Hash, buffer []byte, size int) int {
 func verify(mac okapi.Hash, buffer []byte, size int) ([]byte, error) {
 	//fmt.Printf("Signed: %q\n", buffer[:HeaderSize+8+size])
 	if mac == nil {
-		return buffer[8+HeaderSize:][:size], nil
+		return buffer[BufferHeaderSize:][:size], nil
 	}
 	size -= mac.Size()
 	// Adjust the length field in the header to exclude the record digest,
 	// so that we can feed the buffer directly into to the MAC function.
-	lengthHeader := buffer[8+3:][:2]
+	lengthHeader := buffer[BufferHeaderSize-HeaderSize+3:][:2]
 	binary.BigEndian.PutUint16(lengthHeader, uint16(size))
 	// Hash whole buffer (including the seq_num and record header),
-	// but excluding the explicit IV room at the beginning.
-	mac.Write(buffer[:8+HeaderSize+size])
-	buffer = buffer[8+HeaderSize:]
+	mac.Write(buffer[BufferHeaderSize-HeaderSize-8:][:8+HeaderSize+size])
+	buffer = buffer[BufferHeaderSize:]
 	// Check that the computed digest matches the received digest.
 	ok := subtle.ConstantTimeCompare(buffer[size:][:mac.Size()], mac.Digest()) == 1
 	mac.Reset()
 	if !ok {
 		return nil, InvalidRecordMAC
 	}
+	// Return a slice framing the record payload.
 	return buffer[:size], nil
 }
