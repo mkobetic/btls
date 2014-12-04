@@ -2,7 +2,6 @@ package records
 
 import (
 	"encoding/binary"
-	"github.com/mkobetic/okapi"
 	"io"
 )
 
@@ -35,7 +34,7 @@ func NewWriter(writer io.Writer, buffer []byte) *Writer {
 		buffer = buffer[:MaxBufferSize]
 	}
 	w := &Writer{writer: writer, buffer: buffer}
-	w.record = buffer[BufferHeaderSize-HeaderSize:] // first 8 bytes are seq_num
+	w.record = buffer[PayloadOffset-HeaderSize:] // first 8 bytes are seq_num
 	content := w.record[HeaderSize : HeaderSize+w.maxPlaintextLength()]
 	w.content = content
 	w.free = content
@@ -69,16 +68,17 @@ func (w *Writer) Write(b []byte) (int, error) {
 
 // Flush emits a record with entire buffered content into the underlying writer.
 func (w *Writer) Flush() (err error) {
-	length := len(w.content) - len(w.free)
-	binary.BigEndian.PutUint64(w.buffer[0:8], w.seqNum)
+	binary.BigEndian.PutUint64(w.buffer[PayloadOffset-HeaderSize-8:][:8], w.seqNum)
 	w.seqNum += 1
 	if w.seqNum == 0xFFFFFFFFFFFFFFFF {
 		return RecordSequenceNumberOverflow
 	}
-	if length, err = w.cipher.Seal(w.buffer, length); err != nil {
+	var length = len(w.content) - len(w.free)
+	var record []byte
+	if record, err = w.cipher.Seal(w.buffer, length); err != nil {
 		return err
 	}
-	if _, err = w.writer.Write(w.record[:length+HeaderSize]); err != nil {
+	if _, err = w.writer.Write(record); err != nil {
 		return err
 	}
 	if f, ok := w.writer.(flusher); ok {
@@ -87,6 +87,8 @@ func (w *Writer) Flush() (err error) {
 		}
 	}
 	w.free = w.content
+	// restore type and version fields in the record slice
+	copy(w.record, record[:HeaderSize-2])
 	return err
 }
 
@@ -150,7 +152,7 @@ func (w *Writer) SetContentType(t ContentType) error {
 // SetCipher reconfigures the Writer with the new security parameters.
 // If there is any previously buffered content, it is flushed in a record
 // protected with the previous security parameters.
-func (w *Writer) SetCipher(cs *CipherSpec, v ProtocolVersion, key, iv, macKey []byte, random okapi.Random) error {
+func (w *Writer) SetCipher(cs CipherSpec, v ProtocolVersion, key, iv, macKey []byte, random Random) error {
 	if !w.bufferEmpty() {
 		if err := w.Flush(); err != nil {
 			return err

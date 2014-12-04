@@ -59,7 +59,7 @@ func BenchmarkRW_AES_128_CBC_SHA_TLS10(b *testing.B) {
 func BenchmarkRW_AES_256_CBC_SHA256_TLS12(b *testing.B) {
 	benchmarkRW(b, 1024, 16384, AES_256_CBC_SHA256, TLS12)
 }
-func benchmarkRW(b *testing.B, recordSize int, payloadSize int, cs *CipherSpec, v ProtocolVersion) {
+func benchmarkRW(b *testing.B, recordSize int, payloadSize int, cs *OkapiCipherSpec, v ProtocolVersion) {
 	var key, iv, macKey []byte
 	if cs.Cipher != nil {
 		key = bytes.Repeat([]byte{42}, cs.CipherKeySize)

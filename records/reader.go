@@ -9,7 +9,7 @@ import (
 type Reader struct {
 	reader      io.Reader       // source of TLS records
 	buffer      []byte          // holds the entire TLS record with seq_num prepended
-	record      []byte          // frames the entire TLS record (including the header)
+	record      []byte          // frames the entire TLS record (including the header and explicit IV)
 	unread      []byte          // frames the unread part of the payload
 	cipher      Cipher          // opens incoming sealed record
 	seqNum      uint64          // current record number
@@ -32,7 +32,6 @@ func NewReader(reader io.Reader, buffer []byte) *Reader {
 		return nil
 	}
 	r := &Reader{reader: reader, buffer: buffer, ContentType: Handshake}
-	r.record = buffer[BufferHeaderSize-HeaderSize:] // first 8 bytes are seq_num
 	r.SetCipher(NULL_NULL, SSL30, nil, nil, nil)
 	return r
 }
@@ -71,25 +70,21 @@ func (r *Reader) readRecord() error {
 	if length > MaxCiphertextLength {
 		return RecordTooLarge
 	}
-	r.unread = r.record[HeaderSize : HeaderSize+length]
+	r.unread = r.record[HeaderSize:][:length]
 	m, err = r.reader.Read(r.unread)
 	if err != nil {
 		return err
 	}
 	_assert(m == length, "incomplete record read %d, expected %d", m, length)
 
-	binary.BigEndian.PutUint64(r.buffer[0:8], r.seqNum)
+	binary.BigEndian.PutUint64(r.buffer[r.cipher.SealedRecordOffset()-8:][:8], r.seqNum)
 	r.seqNum += 1
 	if r.seqNum == 0xFFFFFFFFFFFFFFFF {
 		return RecordSequenceNumberOverflow
 	}
 
-	length, err = r.cipher.Open(r.buffer, length)
-	if err != nil {
-		return err
-	}
-	r.unread = r.unread[:length]
-	return nil
+	r.unread, err = r.cipher.Open(r.buffer, length)
+	return err
 }
 
 // Close releases any associated resources.
@@ -103,8 +98,9 @@ func (r *Reader) Close() error {
 
 // SetCipher reconfigures the Reader with the new security parameters.
 // Subsequent Reads will process new records using the new parameters.
-func (r *Reader) SetCipher(cs *CipherSpec, v ProtocolVersion, key, iv, macKey []byte) error {
+func (r *Reader) SetCipher(cs CipherSpec, v ProtocolVersion, key, iv, macKey []byte) error {
 	r.cipher = cs.New(v, key, iv, macKey, false, nil)
+	r.record = r.buffer[r.cipher.SealedRecordOffset():]
 	return nil
 }
 

@@ -54,13 +54,14 @@ const (
 	// Largest MAC digest size.
 	MaxDigestSize = 32
 	// Maximum buffer size.
-	MaxBufferSize = MaxCiphertextLength + BufferHeaderSize
+	MaxBufferSize = MaxCiphertextLength + PayloadOffset
 	// Buffer holds seq_num (uint64) before the full TLS record.
-	// For explicit IV ciphers it also needs room for insertion of the IV
-	BufferHeaderSize = HeaderSize + 8 + MaxBlockSize
+	// For explicit IV ciphers it also needs room for insertion of the IV.
+	// PayloadOffset specifies a fixed position in the buffer where the actual record payload starts.
+	PayloadOffset = HeaderSize + 8 + MaxBlockSize
 	// Minimum space required at the end of the buffer to accommodate
-	// largest MAC and padding for the largest block cipher and explicit IV (2 x block size)
-	MinBufferTrailerSize = MaxDigestSize + 2*MaxBlockSize
+	// largest MAC and padding for the largest block cipher
+	MinBufferTrailerSize = MaxDigestSize + MaxBlockSize
 )
 
 var (
